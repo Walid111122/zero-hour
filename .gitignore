@@ -49,6 +49,15 @@ artifacts/
 # ---------- Cline <-> Unity Bridge (runtime only, never committed) ----------
 bridge/
 
+# ---------- Unity batch-mode logs from scripted editor invocations ----------
+unity-*.log
+
+# ---------- Generated Sim symbols ----------
+# The DLL itself IS committed so a fresh clone opens in Unity without a build step.
+# The .pdb is a local debugging convenience and churns on every rebuild.
+client/Assets/Plugins/ZeroHour.Sim/*.pdb
+client/Assets/Plugins/ZeroHour.Sim/*.pdb.meta
+
 # ---------- Secrets & local config ----------
 .env
 .env.*

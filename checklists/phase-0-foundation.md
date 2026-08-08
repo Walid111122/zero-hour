@@ -12,7 +12,7 @@
 - [x] `git init`, initial commit — `39da4db`, LFS installed
 - [x] `.gitignore` — Unity (`Library/`, `Temp/`, `Logs/`, `Build/`, `UserSettings/`, `*.csproj`, `*.sln.user`) + .NET (`bin/`, `obj/`) + `bridge/` + `.env*`
 - [x] `.gitattributes` — LFS for `*.png *.jpg *.psd *.fbx *.wav *.ogg *.mp3 *.ttf`, plus `* text=auto eol=lf`
-- [ ] `README.md` — one-paragraph project summary, links to `docs/00-README-INDEX.md`
+- [x] `README.md` — project summary, layout table, and the no-float rule stated up front
 - [ ] `LICENSE` decision (proprietary; keep third-party attributions in `docs/ATTRIBUTION.md`)
 - [ ] `docs/ATTRIBUTION.md` created empty with the table header (`18 §2`)
 - [ ] Branch policy: work on `main` solo, but never force-push
@@ -42,12 +42,16 @@ The float ban needs to be enforced by tooling, not discipline. A single `float` 
 
 ## 0.3 Unity client
 
-- [ ] `client/` Unity project on **6000.5.6f1**, URP template
-- [ ] Folder structure per `17 §1` (`Assets/_Project/...`)
-- [ ] Packages installed per `17 §6` — **you do this in Package Manager**
+- [x] `client/` Unity project on **6000.5.6f1** — created via `-createProject`, URP package added
+- [~] Folder structure per `17 §1` (`Assets/_Project/...`) — `Code/Editor/Bridge` in place
+- [x] Packages installed per `17 §6` — scripted in `Assets/Editor/PackageSetup.cs`, no manual clicking:
+      URP 17.5.0 · Input System 1.20.0 · Addressables 4.0.1 · Test Framework 1.7.0 ·
+      Newtonsoft Json 3.2.2 · uGUI 2.5.0. Localization, Mobile Notifications, WebRTC and
+      Billing are deferred to the phase that needs them — unused packages still cost import time.
 - [ ] Assembly definitions per `17 §2` with the dependency rules enforced
-- [ ] `ZeroHour.Sim.dll` referenced from `Assets/Plugins/`
-- [ ] `tools/scripts/build-sim.ps1` — builds `shared/Sim` and copies the DLL into Unity
+- [x] `ZeroHour.Sim.dll` referenced from `Assets/Plugins/ZeroHour.Sim/`
+- [x] `tools/scripts/build-sim.ps1` — builds `shared/Sim`, **runs the determinism suite, and
+      refuses to copy the DLL if it fails**, then copies into Unity
 - [ ] `Boot.unity` + `Main.unity` scenes, additive load per `17 §4`
 - [ ] `Bootstrap.cs` composition root + `ServiceContainer` + `ServiceLocator`
 - [ ] Stub services: `IClock`, `IConfigService`, `ISaveService`, `IEventBus`, `IAudioService`, `IApiClient`
@@ -59,21 +63,27 @@ The float ban needs to be enforced by tooling, not discipline. A single `float` 
 
 Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` folder.
 
-- [ ] `ZeroHour.Bridge` asmdef — **Editor platform only**
-- [ ] `BridgeWatcher` polling `bridge/request.json` on `EditorApplication.update`
-- [ ] Console capture → `bridge/console.log` (rolling, with severity + stack)
-- [ ] Response writer → `bridge/response.json`
-- [ ] Command: `compile` — returns errors/warnings with file:line
-- [ ] Command: `refresh`
-- [ ] Command: `enter_play` / `exit_play` with exception capture
+- [x] `ZeroHour.Bridge` asmdef — **Editor platform only** (`includePlatforms: ["Editor"]`)
+- [x] `BridgeWatcher` polling `bridge/request.json` on `EditorApplication.update` (0.5 s)
+- [x] Console capture → `bridge/console.log` (rolling at 4 MB, severity + stack)
+- [x] Response writer → `bridge/response.json` (temp-file + move, so no partial reads)
+- [x] Command: `compile` — returns errors/warnings, survives the domain reload
+- [x] Command: `refresh`
+- [x] Command: `enter_play` / `exit_play` with error count
 - [ ] Command: `run_tests` (edit + play mode, per-test results)
-- [ ] Command: `get_logs`
-- [ ] Command: `screenshot` → PNG of the Game view
-- [ ] Command: `scene_dump` → hierarchy as JSON
+- [x] Command: `get_logs`
+- [x] Command: `screenshot` → PNG of the Game view
+- [x] Command: `scene_dump` → hierarchy as JSON (depth-capped at 8)
 - [ ] Command: `build_webgl` / `build_android`
 - [ ] Command: `generate_so` — CSV → ScriptableObject instances
-- [ ] Fixed command allowlist, **no arbitrary code execution**
-- [ ] Verified excluded from player builds (check a build's assembly list)
+- [x] Fixed command allowlist, **no arbitrary code execution**
+- [x] Verified excluded from player builds — editor-only asmdef; `bridge/` is gitignored
+- [x] **Round-trip verified:** `{"command":"ping"}` → `{"ok":true,"message":"pong"}` in ~10 s
+
+**Why a file protocol rather than a socket:** a `compile` command triggers a domain reload that
+would drop an open socket mid-command. Files survive the reload — the pending request id parks
+in `SessionState` and the response is written once the editor comes back. It also leaves an
+inspectable transcript on disk when something misbehaves.
 
 ## 0.5 Server skeleton
 
