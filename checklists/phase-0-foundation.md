@@ -80,7 +80,10 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
 - [x] Command: `enter_play` / `exit_play` with error count
 - [ ] Command: `run_tests` (edit + play mode, per-test results)
 - [x] Command: `get_logs`
-- [x] Command: `screenshot` → PNG of the Game view
+- [x] Command: `screenshot` → PNG via an explicit camera render (1080×1920).
+      `ScreenCapture.CaptureScreenshot` was tried first and silently produced no file in the
+      editor, in both edit and play mode; rendering a camera to a RenderTexture writes the file
+      before the command returns, so the response reports actual bytes instead of a promise
 - [x] Command: `scene_dump` → hierarchy as JSON (depth-capped at 8)
 - [x] Command: `open_scene` — path-guarded to `.unity` files under `Assets/`, no `..` segments.
       Play mode runs the *currently open* scene rather than build index 0, so driving play
@@ -94,6 +97,10 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
       while playing, so the domain reload the response waits on never arrives
 - [x] `enter_play` / `exit_play` answer immediately when already in the target state — same
       root cause: no state change means no domain reload, so the caller waited forever
+- [x] Play-mode responses are driven by `EditorApplication.playModeStateChanged`, not by the
+      domain reload. This project sets `m_EnterPlayModeOptionsEnabled: 1`, and the reload on
+      *leaving* play mode proved unreliable — `exit_play` intermittently never answered. The
+      state-change event fires regardless of reload settings
 
 **Why a file protocol rather than a socket:** a `compile` command triggers a domain reload that
 would drop an open socket mid-command. Files survive the reload — the pending request id parks
@@ -143,10 +150,15 @@ inherit that pattern.
 - [ ] `unity` job — nightly, GameCI, edit-mode tests + Android build artifact
 - [ ] Status badge in `README.md`
 
-⚠ **The workflow has never actually run.** It is written and structurally checked (no tabs,
-valid key layout, 2 jobs), and the `-warnaserror` build it depends on passes locally with 0
-warnings across all three projects — but no Python/yamllint was available to parse it offline,
-and nothing has been pushed to GitHub yet. Treat `0.6` as unverified until a real run goes green.
+**Verified 2026-08-08.** First push to `Walid111122/zero-hour` (private) triggered run
+[31248286269](https://github.com/Walid111122/zero-hour/actions/runs/31248286269) and both jobs
+passed — dependency scan 22 s, determinism suite 31 s. The earlier caveat that the workflow had
+never executed no longer applies.
+
+⚠ **Carried forward:** the run logged a deprecation notice — `actions/checkout@v4` and
+`actions/setup-dotnet@v4` target Node.js 20, which GitHub now force-runs on Node 24. Nothing is
+broken today, but these need bumping to `@v5` before the runners drop the shim. Tracked in 0.6
+rather than fixed now, because changing action versions deserves its own green run to confirm.
 
 ## 0.7 Your manual steps (`27 §2`)
 
@@ -154,7 +166,8 @@ and nothing has been pushed to GitHub yet. Treat `0.6` as unverified until a rea
 - [ ] Sign in to Unity (Personal licence)
 - [ ] Open `f:\last war build\client`, wait out the first import
 - [ ] Install the packages Cline lists
-- [ ] Run `tools\scripts\build-sim.ps1` once
+- [x] Run `tools\scripts\build-sim.ps1` once — build clean, determinism suite 40/40 in 47 ms,
+      `ZeroHour.Sim.dll` (12.5 KB) copied into `client/Assets/Plugins/`
 - [x] Press Play on `Boot.unity`, confirm no errors — driven through the bridge:
       `[Bootstrap] Services ready in 1 ms (config v0)` → `[Bootstrap] Loaded 'Main'`, 0 errors
 - [x] Report the console output back
@@ -169,11 +182,14 @@ and nothing has been pushed to GitHub yet. Treat `0.6` as unverified until a rea
       `Services ready in 1 ms (config v0)` then `Loaded 'Main'`
 - [x] Bridge round-trip verified: `ping` → `pong`; `compile`, `open_scene`, `enter_play`,
       `exit_play`, `scene_dump`, `get_logs` and `clear_logs` all driven end to end
-- [ ] Bridge `screenshot` produces a viewable PNG
+- [x] Bridge `screenshot` produces a viewable PNG — 30.9 KB, header `89 50 4E 47`, captured
+      from `Main Camera`. Note that `Boot.unity` has no camera by design, so a capture there
+      correctly reports "No active camera" rather than writing a black frame
 - [ ] Docker Compose brings up app + postgres + redis locally
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
-- [ ] CI green on a fresh push
-- [ ] Git LFS tracking confirmed (`git lfs ls-files`)
+- [x] CI green on a fresh push — first run on `Walid111122/zero-hour` passed both jobs
+      (dependency scan 22 s, determinism suite 31 s)
+- [x] Git LFS tracking confirmed (`git lfs ls-files`) — `client/Assets/Plugins/ZeroHour.Sim/ZeroHour.Sim.dll`
 
 **Do not start Phase 1 until every box above is ticked.** Phase 0 is unglamorous, and the temptation to skip ahead to the fun part is strongest here. The bridge in particular pays for itself within days — without it, every Phase 1 iteration costs a manual round-trip.
 

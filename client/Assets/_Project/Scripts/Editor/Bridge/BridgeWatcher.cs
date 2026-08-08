@@ -40,6 +40,41 @@ namespace ZeroHour.Bridge
             // A compile or play-mode change reloads the domain and wipes this class's state,
             // so a command that spans a reload parks its id in SessionState and completes here.
             EditorApplication.delayCall += CompletePendingAcrossReload;
+
+            // Play-mode transitions are completed from the state-change event rather than the
+            // domain reload above. "Enter Play Mode Options" lets the project disable the
+            // reload entirely, and the reload on *leaving* play mode is not something to rely
+            // on either; this event fires either way.
+            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeChanged;
+        }
+
+        private static void OnPlayModeChanged(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.EnteredEditMode
+                && change != PlayModeStateChange.EnteredPlayMode)
+            {
+                return;
+            }
+
+            string id = SessionState.GetString(PendingIdKey, string.Empty);
+            string command = SessionState.GetString(PendingCommandKey, string.Empty);
+
+            if (string.IsNullOrEmpty(id) || (command != "enter_play" && command != "exit_play"))
+            {
+                return;
+            }
+
+            // Claim the pending id before responding, so the reload path cannot answer twice.
+            SessionState.EraseString(PendingIdKey);
+            SessionState.EraseString(PendingCommandKey);
+
+            bool playing = change == PlayModeStateChange.EnteredPlayMode;
+            bool wanted = command == "enter_play";
+
+            Respond(id, playing == wanted,
+                playing ? "Entered play mode." : "Exited play mode.",
+                "\"errorCount\":" + Json.Num(BridgeConsole.ErrorCount()));
         }
 
         private static void Tick()
@@ -313,23 +348,84 @@ namespace ZeroHour.Bridge
 
         // ---------- screenshot ----------
 
+        /// <summary>
+        /// Renders a camera to a texture and writes a PNG, synchronously.
+        ///
+        /// <c>ScreenCapture.CaptureScreenshot</c> was the obvious choice and does not work here:
+        /// it targets the Game view and defers to end of frame, which in the editor produced no
+        /// file at all in either edit or play mode. Rendering a camera explicitly means the file
+        /// exists before this method returns, so the response can assert it rather than promise it.
+        /// </summary>
         private static void TakeScreenshot(string id)
         {
+            const int Width = 1080;
+            const int Height = 1920;
+
             BridgePaths.EnsureDirectory();
             string path = BridgePaths.Screenshot;
 
-            if (File.Exists(path))
+            Camera camera = Camera.main;
+            if (camera == null)
             {
-                File.Delete(path);
+                foreach (Camera candidate in Camera.allCameras)
+                {
+                    if (candidate != null && candidate.isActiveAndEnabled)
+                    {
+                        camera = candidate;
+                        break;
+                    }
+                }
             }
 
-            ScreenCapture.CaptureScreenshot(path);
+            if (camera == null)
+            {
+                Respond(id, false, "No active camera in the loaded scene to capture.");
+                return;
+            }
 
-            // The capture lands at end of frame, so confirmation is deferred rather than
-            // asserted here — claiming success immediately would sometimes be a lie.
-            Respond(id, true, "Screenshot requested.",
+            RenderTexture target = null;
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture previousCameraTarget = camera.targetTexture;
+            Texture2D image = null;
+
+            try
+            {
+                target = new RenderTexture(Width, Height, 24);
+                camera.targetTexture = target;
+                camera.Render();
+
+                RenderTexture.active = target;
+                image = new Texture2D(Width, Height, TextureFormat.RGB24, false);
+                image.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                image.Apply();
+
+                File.WriteAllBytes(path, image.EncodeToPNG());
+            }
+            finally
+            {
+                // Restore first: leaving a camera pointed at a destroyed target breaks the
+                // editor's own rendering, which is a far worse failure than a missing PNG.
+                camera.targetTexture = previousCameraTarget;
+                RenderTexture.active = previousActive;
+
+                if (target != null)
+                {
+                    target.Release();
+                    UnityEngine.Object.DestroyImmediate(target);
+                }
+
+                if (image != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(image);
+                }
+            }
+
+            var written = new FileInfo(path);
+            Respond(id, written.Exists && written.Length > 0,
+                written.Exists ? "Screenshot written." : "Screenshot failed to write.",
                 "\"path\":" + Json.Str(path)
-                + ",\"note\":" + Json.Str("Written at end of frame; confirm the file exists before reading."));
+                + ",\"bytes\":" + Json.Num((int)(written.Exists ? written.Length : 0))
+                + ",\"camera\":" + Json.Str(camera.name));
         }
 
         // ---------- scene dump ----------
