@@ -9,9 +9,9 @@
 
 ## 0.1 Repository
 
-- [ ] `git init`, initial commit
-- [ ] `.gitignore` — Unity (`Library/`, `Temp/`, `Logs/`, `Build/`, `UserSettings/`, `*.csproj`, `*.sln.user`) + .NET (`bin/`, `obj/`) + `bridge/` + `.env*`
-- [ ] `.gitattributes` — LFS for `*.png *.jpg *.psd *.fbx *.wav *.ogg *.mp3 *.ttf`, plus `* text=auto eol=lf`
+- [x] `git init`, initial commit — `39da4db`, LFS installed
+- [x] `.gitignore` — Unity (`Library/`, `Temp/`, `Logs/`, `Build/`, `UserSettings/`, `*.csproj`, `*.sln.user`) + .NET (`bin/`, `obj/`) + `bridge/` + `.env*`
+- [x] `.gitattributes` — LFS for `*.png *.jpg *.psd *.fbx *.wav *.ogg *.mp3 *.ttf`, plus `* text=auto eol=lf`
 - [ ] `README.md` — one-paragraph project summary, links to `docs/00-README-INDEX.md`
 - [ ] `LICENSE` decision (proprietary; keep third-party attributions in `docs/ATTRIBUTION.md`)
 - [ ] `docs/ATTRIBUTION.md` created empty with the table header (`18 §2`)
@@ -19,16 +19,26 @@
 
 ## 0.2 Solution & shared Sim
 
-- [ ] `ZeroHour.sln` at repo root
-- [ ] `shared/ZeroHour.Sim/` — **netstandard2.1**, `#nullable enable`, no `UnityEngine`, **no `float`/`double`**
-- [ ] `Fixed` fixed-point type (Q32.32 or Q16.16) with `+ - * /`, `Sqrt`, `Min/Max`, `Lerp`
-- [ ] `DetRandom` — xorshift or PCG, explicit seed, no `System.Random`
-- [ ] `Hash` — stable FNV/xxHash over state for determinism fixtures
-- [ ] Analyzer or unit test that **fails the build if `float`/`double`/`System.Random`/`DateTime.Now` appear in `Sim`**
-- [ ] `shared/ZeroHour.Sim.Tests/` — xUnit; fixed-point arithmetic tests; RNG reproducibility tests
-- [ ] `dotnet test` passes in under 1 second
+- [x] `ZeroHour.slnx` at repo root — .NET 10 emits the XML solution format, not `.sln`
+- [x] `shared/ZeroHour.Sim/` — **netstandard2.1**, `#nullable enable`, no `UnityEngine`, **no `float`/`double`**
+- [x] `Fixed` fixed-point type (**Q32.32**) with `+ - * /`, `Sqrt`, `Min/Max`, `Lerp`, `Clamp`, `Parse`
+- [x] `DetRandom` — xorshift128+ seeded via SplitMix64, explicit seed, serialisable state, no `System.Random`
+- [x] `Hash` — stable FNV-1a 64 over state for determinism fixtures
+- [x] Unit tests that **fail the build if `float`/`double`/`System.Random`/`DateTime` appear in `Sim`** — `DeterminismGuardTests`
+- [x] `shared/ZeroHour.Sim.Tests/` — xUnit; fixed-point arithmetic tests; RNG reproducibility tests
+- [x] `dotnet test` passes in under 1 second — **40 tests, 52 ms, zero warnings**
 
 The float ban needs to be enforced by tooling, not discipline. A single `float` that slips into the sim produces a divergence that is extremely painful to find months later (`23 §3`).
+
+**Implementation notes (2026-08-08):**
+- `Fixed` multiply/divide use a hand-rolled 64×64→128-bit intermediate rather than `Int128`,
+  because `Int128` does not exist on netstandard2.1 and Unity must consume this assembly.
+- `Fixed.Divide` shifts the dividend inside the 128-bit path, so `FromFraction(1, 1_000_000_000)`
+  works without overflowing the denominator.
+- `Sqrt` is a binary search on the result, never a hardware `sqrt` instruction.
+- `Hash.Add(string)` length-prefixes and folds UTF-16 units, so `"ab"+"c"` cannot collide
+  with `"a"+"bc"`. The pinned vector `Hash.Of("a") == 0x2BC75A111F39F5D5` guards the algorithm;
+  if it ever changes, every recorded fixture hash must be regenerated deliberately.
 
 ## 0.3 Unity client
 

@@ -20,7 +20,7 @@
 | Phase | Name | Est. | Status | Detail |
 |---|---|---|---|---|
 | **A** | Documentation & Design | 1 session | `[x]` | this file + `docs/` (29 docs) |
-| **0** | Foundation & Tooling | 2–3 wk | `[ ]` | [phase-0](phase-0-foundation.md) |
+| **0** | Foundation & Tooling | 2–3 wk | `[~]` | [phase-0](phase-0-foundation.md) — Sim core done |
 | **1** | MVP — Runner + Idle | 4–6 wk | `[ ]` | [phase-1](phase-1-mvp.md) |
 | **2** | Vertical Slice — Base | 6–8 wk | `[ ]` | [phase-2](phase-2-vertical-slice.md) |
 | **3** | Core Systems | 8–10 wk | `[ ]` | [phase-3](phase-3-core-systems.md) |
@@ -118,13 +118,13 @@ Scope creep is the number one killer of projects in this genre. These gates are 
 
 ---
 
-## PHASE 0 — Foundation & Tooling `[ ]`
+## PHASE 0 — Foundation & Tooling `[~]`
 *Goal: a repo that builds, a Unity project that opens clean, and an AI↔Unity feedback loop.*
 
-- [ ] Git repo initialised, `.gitignore` (Unity + .NET), `.gitattributes` (LFS for art/audio)
-- [ ] `ZeroHour.sln` with all projects
-- [ ] `shared/Sim` — netstandard2.1, no UnityEngine, no float
-- [ ] `shared/Sim.Tests` — xUnit
+- [x] Git repo initialised, `.gitignore` (Unity + .NET), `.gitattributes` (LFS for art/audio)
+- [x] `ZeroHour.slnx` with all projects
+- [x] `shared/Sim` — netstandard2.1, no UnityEngine, no float (`Fixed`, `DetRandom`, `Hash`)
+- [x] `shared/Sim.Tests` — xUnit, 40 tests green in 52 ms, float ban enforced by test
 - [ ] `client/` — Unity project, URP, portrait, Android + WebGL targets
 - [ ] Unity assembly definitions (asmdef) per module
 - [ ] `server/ZeroHour.Server` — ASP.NET Core 10, health endpoint, WebSocket echo
