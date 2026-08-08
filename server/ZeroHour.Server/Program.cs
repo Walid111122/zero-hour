@@ -113,6 +113,53 @@ app.MapGet("/health/sim", () =>
 
 app.MapHealthChecks("/health/ready");
 
+// Dependency check, separate from liveness and readiness on purpose. This one is allowed to
+// be slow and is allowed to fail: it actually talks to the database. Point dashboards and
+// humans at it, never a load balancer, or a transient database blip cycles healthy nodes.
+app.MapGet("/health/deep", async (GameDbContext db, CancellationToken cancellationToken) =>
+{
+    var stopwatch = Stopwatch.StartNew();
+
+    bool canConnect;
+    string? failure = null;
+
+    try
+    {
+        canConnect = await db.Database.CanConnectAsync(cancellationToken);
+    }
+    catch (Exception ex)
+    {
+        canConnect = false;
+
+        // The exception type only. A connection failure message can carry the host, database
+        // name and sometimes the user, and this endpoint is unauthenticated (see the note
+        // above) — so the detail goes to the log, not to the response body.
+        failure = ex.GetType().Name;
+
+        app.Logger.LogError(ex, "Deep health check could not reach the database");
+    }
+
+    stopwatch.Stop();
+
+    var payload = new
+    {
+        status = canConnect ? "healthy" : "degraded",
+        database = new
+        {
+            reachable = canConnect,
+            provider = db.Database.ProviderName,
+            error = failure,
+        },
+        elapsedMs = stopwatch.Elapsed.TotalMilliseconds,
+    };
+
+    // 503 rather than 200-with-a-sad-payload: monitoring should not have to parse JSON to
+    // notice the database is gone.
+    return canConnect
+        ? Results.Ok(payload)
+        : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
+});
+
 // Realtime transport check. Carries no game logic — see EchoHub for why it exists.
 app.MapHub<EchoHub>("/hubs/echo");
 

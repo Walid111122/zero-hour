@@ -44,6 +44,87 @@ jobs:
       - name: Test
         run: dotnet test ZeroHour.slnx --no-build -c Release --verbosity normal
 
+  server:
+    name: Server (Postgres-backed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # A real Postgres, not a mock. The SQLite tests prove the model's shape; only the actual
+    # provider can prove jsonb is jsonb, identity generates keys, and the descending index
+    # exists. Docker is unavailable on the dev machine, so this job is the only place those
+    # assertions run — which is exactly why they must not be allowed to skip silently here.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zerohour
+          POSTGRES_PASSWORD: zerohour
+          POSTGRES_DB: zerohour_test
+        ports:
+          - 5432:5432
+        # Without this the job races the database and fails on a cold start.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ZeroHour.slnx
+
+      - name: Build
+        run: dotnet build ZeroHour.slnx --no-restore -c Release -warnaserror
+
+      - name: Test
+        env:
+          # Matches the ASP.NET Core configuration convention, so the tests read it the same
+          # way the server does rather than through a bespoke variable.
+          ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=zerohour_test;Username=zerohour;Password=zerohour'
+        run: dotnet test ZeroHour.slnx --no-build -c Release --verbosity normal
+
+      # A green run where every Postgres test skipped is indistinguishable from one where
+      # they passed. This asserts they actually executed, so a broken connection string
+      # fails the build instead of quietly deleting the coverage.
+      - name: Fail if Postgres tests were skipped
+        env:
+          ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=zerohour_test;Username=zerohour;Password=zerohour'
+        run: |
+          dotnet test server/ZeroHour.Tests --no-build -c Release \
+            --filter 'FullyQualifiedName~PostgresSchemaTests' \
+            --logger 'console;verbosity=normal' > pg.txt 2>&1
+          cat pg.txt
+          if grep -qiE 'Skipped:[[:space:]]*[1-9]' pg.txt; then
+            echo "::error::Postgres tests skipped in CI - the database was not reachable."
+            exit 1
+          fi
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Gitleaks needs history: a secret committed and then removed is still a leaked
+          # secret, and scanning only the tip would miss exactly that case.
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   security:
     name: Dependency scan
     runs-on: ubuntu-latest
