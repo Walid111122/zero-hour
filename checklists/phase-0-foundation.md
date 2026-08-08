@@ -136,8 +136,18 @@ that actually answers the question.
 - [x] `GET /health/ready` → readiness, separate from liveness on purpose: a cache blip must not
       pull a healthy app node out of the load balancer
 - [ ] `GET /health/deep` → dependency checks (needs Postgres + Redis first)
-- [ ] SignalR hub with an echo method (proves the realtime path)
-- [ ] Serilog structured logging, no PII
+- [x] SignalR hub with an echo method (proves the realtime path) — `EchoHub` at `/hubs/echo`,
+      MessagePack added per `16 §1`. **Verified against a running server, not just compiled:**
+      a raw client drove `negotiate` → WebSocket → protocol handshake → `Echo` invocation and
+      got the message back with a server timestamp and connection id. Note that
+      `AddMessagePackProtocol` *adds* MessagePack alongside JSON rather than replacing it —
+      the JSON handshake in that test is what proves both are live
+- [x] Serilog structured logging, no PII — console sink, `UseSerilogRequestLogging` collapsing
+      the per-request noise into one line, config read from `IConfiguration` so levels are
+      tunable without a rebuild. The echo body is deliberately **not** logged, only its length;
+      confirmed by grepping the run's log for the string that was sent and finding nothing.
+      A sink cannot un-log PII that the call site already interpolated, so the discipline has
+      to live at the call sites
 - [ ] `server/ZeroHour.Tests/` — xUnit + Testcontainers
 - [ ] EF Core with SQLite for local dev, Postgres provider ready
 - [ ] First migration: `players`, `player_states` (`15 §2`)

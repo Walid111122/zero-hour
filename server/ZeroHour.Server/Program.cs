@@ -1,12 +1,34 @@
 using System.Diagnostics;
 using System.Reflection;
+using Serilog;
+using ZeroHour.Server.Hubs;
 using ZeroHour.Sim;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// Structured logging, so a production incident can be queried rather than grepped.
+// Console only for now: shipping to a log aggregator is a Phase 9 concern, and the
+// sink is a configuration change rather than a code one when that time comes.
+//
+// No PII (`24 §6`). That constraint binds the call sites — the sink cannot rescue a
+// message that already had a player's email interpolated into it.
+builder.Host.UseSerilog((context, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console());
+
 builder.Services.AddHealthChecks();
 
+// MessagePack over the default JSON protocol (`16 §1`): the payloads are dense and
+// frequent, and mobile clients pay for every byte on a metered connection.
+builder.Services
+    .AddSignalR()
+    .AddMessagePackProtocol();
+
 WebApplication app = builder.Build();
+
+// One structured line per request, instead of the several ASP.NET Core logs by default.
+app.UseSerilogRequestLogging();
 
 // Kestrel sits behind Nginx in deployment (docs/14 §5), which terminates TLS.
 if (!app.Environment.IsDevelopment())
@@ -60,5 +82,8 @@ app.MapGet("/health/sim", () =>
 });
 
 app.MapHealthChecks("/health/ready");
+
+// Realtime transport check. Carries no game logic — see EchoHub for why it exists.
+app.MapHub<EchoHub>("/hubs/echo");
 
 app.Run();
