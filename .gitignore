@@ -1,0 +1,73 @@
+# ---------- Unity ----------
+client/Library/
+client/Temp/
+client/Obj/
+client/Build/
+client/Builds/
+client/Logs/
+client/UserSettings/
+client/MemoryCaptures/
+client/Recordings/
+client/[Aa]ssets/AssetStoreTools*
+client/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Unity-generated project files (regenerated on open)
+client/*.csproj
+client/*.unityproj
+client/*.sln
+client/*.suo
+client/*.user
+client/*.userprefs
+client/*.pidb
+client/*.booproj
+client/*.svd
+client/*.pdb.meta
+client/*.mdb.meta
+client/sysinfo.txt
+
+# Crash reports
+client/crashlytics-build.properties
+
+# ---------- .NET ----------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+.vs/
+artifacts/
+
+# ---------- Cline <-> Unity Bridge (runtime only, never committed) ----------
+bridge/
+
+# ---------- Secrets & local config ----------
+.env
+.env.*
+!.env.example
+*.keystore
+!debug.keystore
+*.pfx
+*.p12
+secrets.json
+appsettings.Local.json
+appsettings.Development.local.json
+
+# ---------- Tooling ----------
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+node_modules/
+
+# ---------- Build output ----------
+dist/
+publish/

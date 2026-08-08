@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/shared/">
+    <Project Path="shared/ZeroHour.Sim.Tests/ZeroHour.Sim.Tests.csproj" />
+    <Project Path="shared/ZeroHour.Sim/ZeroHour.Sim.csproj" />
+  </Folder>
+</Solution>

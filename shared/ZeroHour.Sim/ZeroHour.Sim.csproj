@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.1 so Unity can consume the compiled DLL directly -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>ZeroHour.Sim</AssemblyName>
+    <RootNamespace>ZeroHour.Sim</RootNamespace>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!--
+    CRITICAL CONSTRAINT (docs/14, docs/23):
+    This assembly must NEVER reference UnityEngine, and must NEVER use
+    float, double, System.Random, or DateTime.Now. It is shared verbatim
+    between client prediction and server authority; any non-determinism
+    here becomes a desync that is extremely expensive to diagnose later.
+    ZeroHour.Sim.Tests.DeterminismGuardTests enforces this automatically.
+  -->
+
+</Project>
