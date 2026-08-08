@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using UnityEditor;
 using UnityEditor.Compilation;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -126,15 +127,15 @@ namespace ZeroHour.Bridge
                     break;
 
                 case "enter_play":
-                    SessionState.SetString(PendingIdKey, request.id);
-                    SessionState.SetString(PendingCommandKey, "enter_play");
-                    EditorApplication.isPlaying = true;
+                    SetPlaying(request.id, true);
                     break;
 
                 case "exit_play":
-                    SessionState.SetString(PendingIdKey, request.id);
-                    SessionState.SetString(PendingCommandKey, "exit_play");
-                    EditorApplication.isPlaying = false;
+                    SetPlaying(request.id, false);
+                    break;
+
+                case "open_scene":
+                    OpenSceneByPath(request.id, request.argString);
                     break;
 
                 default:
@@ -144,10 +145,90 @@ namespace ZeroHour.Bridge
             }
         }
 
+        // ---------- play mode ----------
+
+        /// <summary>
+        /// Enters or leaves play mode, answering immediately when already in the target state.
+        ///
+        /// The deferred path relies on the domain reload that a play-mode transition triggers to
+        /// run <see cref="CompletePendingAcrossReload"/>. Asking for a state the editor is
+        /// already in produces no transition and therefore no reload, so parking the id would
+        /// leave the caller waiting for a response that is never written.
+        /// </summary>
+        private static void SetPlaying(string id, bool play)
+        {
+            if (EditorApplication.isPlaying == play)
+            {
+                Respond(id, true, play ? "Already in play mode." : "Already stopped.",
+                    "\"errorCount\":" + Json.Num(BridgeConsole.ErrorCount()));
+                return;
+            }
+
+            SessionState.SetString(PendingIdKey, id);
+            SessionState.SetString(PendingCommandKey, play ? "enter_play" : "exit_play");
+            EditorApplication.isPlaying = play;
+        }
+
+        // ---------- scenes ----------
+
+        /// <summary>
+        /// Opens a scene by project-relative path, e.g. "Assets/_Project/Scenes/Boot.unity".
+        ///
+        /// Play mode runs whichever scene is currently open rather than build index 0, so
+        /// driving play from outside the editor is only meaningful if the scene can be selected
+        /// first. The path is constrained to .unity files under Assets/ because the bridge reads
+        /// its input from a file that any local process can write.
+        /// </summary>
+        private static void OpenSceneByPath(string id, string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                Respond(id, false, "open_scene requires argString with a project-relative scene path.");
+                return;
+            }
+
+            string normalised = scenePath.Replace('\\', '/');
+
+            if (!normalised.StartsWith("Assets/", StringComparison.Ordinal)
+                || !normalised.EndsWith(".unity", StringComparison.OrdinalIgnoreCase)
+                || normalised.Contains(".."))
+            {
+                Respond(id, false, "Scene path must be a .unity file under Assets/ with no '..' segments.");
+                return;
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(normalised) == null)
+            {
+                Respond(id, false, "No scene asset at '" + normalised + "'.");
+                return;
+            }
+
+            try
+            {
+                Scene opened = EditorSceneManager.OpenScene(normalised, OpenSceneMode.Single);
+                Respond(id, opened.IsValid(),
+                    opened.IsValid() ? "Opened scene '" + opened.name + "'." : "Failed to open scene.",
+                    "\"scene\":" + Json.Str(opened.name) + ",\"path\":" + Json.Str(normalised));
+            }
+            catch (Exception ex)
+            {
+                Respond(id, false, "OpenScene threw: " + ex.Message);
+            }
+        }
+
         // ---------- compile ----------
 
         private static void BeginCompile(string id)
         {
+            // Unity defers script compilation while playing, so the domain reload this waits on
+            // never arrives and the caller hangs until it times out. Refusing loudly beats
+            // failing silently.
+            if (EditorApplication.isPlaying)
+            {
+                Respond(id, false, "Cannot compile during play mode. Send exit_play first.");
+                return;
+            }
+
             SessionState.SetString(PendingIdKey, id);
             SessionState.SetString(PendingCommandKey, "compile");
 

@@ -62,7 +62,10 @@ The float ban needs to be enforced by tooling, not discipline. A single `float` 
       `IAudioService` and `IApiClient` deferred to Phase 1, where they get real work to do.
 - [ ] Player settings: portrait, IL2CPP, ARM64, min API 24, target API 35
 - [ ] Three quality tiers created (`18 §8`)
-- [ ] Project opens with **zero console errors**
+- [x] Project opens with **zero console errors** — opened in Unity 6000.5.6f1; `compile` via the
+      bridge returns 0 errors / 0 warnings. Remaining console noise is stock Unity 6 (Input
+      Manager and Dynamic Batching deprecation) plus empty-asmdef warnings for the not-yet-
+      populated `Base`/`Net`/`Runner`/`UI` assemblies
 
 ## 0.4 Cline ↔ Unity Bridge
 
@@ -79,11 +82,18 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
 - [x] Command: `get_logs`
 - [x] Command: `screenshot` → PNG of the Game view
 - [x] Command: `scene_dump` → hierarchy as JSON (depth-capped at 8)
+- [x] Command: `open_scene` — path-guarded to `.unity` files under `Assets/`, no `..` segments.
+      Play mode runs the *currently open* scene rather than build index 0, so driving play
+      remotely is only meaningful if the scene can be selected first
 - [ ] Command: `build_webgl` / `build_android`
 - [ ] Command: `generate_so` — CSV → ScriptableObject instances
 - [x] Fixed command allowlist, **no arbitrary code execution**
 - [x] Verified excluded from player builds — editor-only asmdef; `bridge/` is gitignored
 - [x] **Round-trip verified:** `{"command":"ping"}` → `{"ok":true,"message":"pong"}` in ~10 s
+- [x] `compile` refuses during play mode instead of hanging — Unity defers script compilation
+      while playing, so the domain reload the response waits on never arrives
+- [x] `enter_play` / `exit_play` answer immediately when already in the target state — same
+      root cause: no state change means no domain reload, so the caller waited forever
 
 **Why a file protocol rather than a socket:** a `compile` command triggers a domain reload that
 would drop an open socket mid-command. Files survive the reload — the pending request id parks
@@ -145,8 +155,9 @@ and nothing has been pushed to GitHub yet. Treat `0.6` as unverified until a rea
 - [ ] Open `f:\last war build\client`, wait out the first import
 - [ ] Install the packages Cline lists
 - [ ] Run `tools\scripts\build-sim.ps1` once
-- [ ] Press Play on `Boot.unity`, confirm no errors
-- [ ] Report the console output back
+- [x] Press Play on `Boot.unity`, confirm no errors — driven through the bridge:
+      `[Bootstrap] Services ready in 1 ms (config v0)` → `[Bootstrap] Loaded 'Main'`, 0 errors
+- [x] Report the console output back
 
 ---
 
@@ -154,9 +165,10 @@ and nothing has been pushed to GitHub yet. Treat `0.6` as unverified until a rea
 
 - [x] `dotnet build` clean on the whole solution — 3 projects, 0 warnings under `-warnaserror`
 - [x] `dotnet test` green, sim tests under 1 s — 40 tests, 52 ms
-- [~] Unity compiles with zero errors in batch mode; **play mode not yet exercised** — Bootstrap
-      has never actually run, so the boot log is still unproven
-- [x] Bridge round-trip verified: `ping` → `pong` (`compile` path written, not yet driven end to end)
+- [x] Unity compiles with zero errors **and play mode is exercised** — Bootstrap runs and logs
+      `Services ready in 1 ms (config v0)` then `Loaded 'Main'`
+- [x] Bridge round-trip verified: `ping` → `pong`; `compile`, `open_scene`, `enter_play`,
+      `exit_play`, `scene_dump`, `get_logs` and `clear_logs` all driven end to end
 - [ ] Bridge `screenshot` produces a viewable PNG
 - [ ] Docker Compose brings up app + postgres + redis locally
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
