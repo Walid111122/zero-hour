@@ -148,9 +148,17 @@ that actually answers the question.
       confirmed by grepping the run's log for the string that was sent and finding nothing.
       A sink cannot un-log PII that the call site already interpolated, so the discipline has
       to live at the call sites
-- [ ] `server/ZeroHour.Tests/` — xUnit + Testcontainers
-- [ ] EF Core with SQLite for local dev, Postgres provider ready
-- [ ] First migration: `players`, `player_states` (`15 §2`)
+- [~] `server/ZeroHour.Tests/` — xUnit project created, **9 schema tests green**. Testcontainers
+      is still outstanding and needs Docker; until then nothing here exercises real Postgres
+- [x] EF Core with SQLite for local dev, Postgres provider ready — provider chosen by which
+      connection string is present, and the server **refuses to start on SQLite outside
+      Development** rather than silently accepting writes that never reach the real database
+- [x] First migration: `players`, `player_states` (`15 §2`) — snake_case, epoch-millisecond
+      `bigint` timestamps, soft delete, `jsonb` resources. Verified by applying the **migration**
+      (not `EnsureCreated`, which builds from the model and would pass even if the migration
+      were broken) and asserting the constraints actually bite: duplicate `(player_id, state_id)`
+      rejected, orphan FK rejected, duplicate email rejected while *multiple NULL* emails are
+      allowed, schema defaults applied, and deletion of a player with states refused
 - [ ] `docker-compose.yml` for local: app + postgres + redis
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
@@ -197,8 +205,8 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 
 ## Gate checklist
 
-- [x] `dotnet build` clean on the whole solution — 3 projects, 0 warnings under `-warnaserror`
-- [x] `dotnet test` green, sim tests under 1 s — 40 tests, 52 ms
+- [x] `dotnet build` clean on the whole solution — 4 projects, 0 warnings under `-warnaserror`
+- [x] `dotnet test` green, sim tests under 1 s — 49 tests (40 sim in 60 ms, 9 schema in 1 s)
 - [x] Unity compiles with zero errors **and play mode is exercised** — Bootstrap runs and logs
       `Services ready in 1 ms (config v0)` then `Loaded 'Main'`
 - [x] Bridge round-trip verified: `ping` → `pong`; `compile`, `open_scene`, `enter_play`,

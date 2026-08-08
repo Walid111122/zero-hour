@@ -55,6 +55,14 @@ artifacts/
 # ---------- Unity batch-mode logs from scripted editor invocations ----------
 unity-*.log
 
+# ---------- Local SQLite development database ----------
+# Never committed. It is a developer's scratch state, it drifts from the migrations the
+# moment anyone edits a row by hand, and a stale one masks a broken migration by already
+# having the tables. Postgres is the truth (`15`).
+*.db
+*.db-shm
+*.db-wal
+
 # ---------- Generated Sim symbols ----------
 # The DLL itself IS committed so a fresh clone opens in Unity without a build step.
 # The .pdb is a local debugging convenience and churns on every rebuild.

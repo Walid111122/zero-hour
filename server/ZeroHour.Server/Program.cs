@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Reflection;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
+using ZeroHour.Server.Data;
 using ZeroHour.Server.Hubs;
 using ZeroHour.Sim;
 
@@ -18,6 +20,34 @@ builder.Host.UseSerilog((context, configuration) => configuration
     .WriteTo.Console());
 
 builder.Services.AddHealthChecks();
+
+// Postgres is the truth (`15`); SQLite exists so local work does not require Docker.
+// The provider is chosen by which connection string is present rather than by a separate
+// flag, so there is one source of truth and no way to set the two inconsistently.
+string? postgres = builder.Configuration.GetConnectionString("Postgres");
+
+if (!string.IsNullOrWhiteSpace(postgres))
+{
+    builder.Services.AddDbContext<GameDbContext, PostgresGameDbContext>(options =>
+        options.UseNpgsql(postgres));
+}
+else
+{
+    // Deliberately loud. Silently falling back to a local file in production would mean
+    // writes appearing to succeed while landing nowhere anyone can see.
+    string sqlite = builder.Configuration.GetConnectionString("Sqlite")
+        ?? "Data Source=zerohour.dev.db";
+
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "ConnectionStrings__Postgres is required outside Development. Refusing to start "
+            + "on SQLite, which would accept writes that never reach the real database.");
+    }
+
+    builder.Services.AddDbContext<GameDbContext, SqliteGameDbContext>(options =>
+        options.UseSqlite(sqlite));
+}
 
 // MessagePack over the default JSON protocol (`16 §1`): the payloads are dense and
 // frequent, and mobile clients pay for every byte on a metered connection.

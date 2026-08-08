@@ -20,7 +20,27 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Pins a patched native SQLite. EF Core's Sqlite provider pulls in
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11 transitively, which carries a high-severity
+         advisory (GHSA-2m69-gcr7-jv3q). A direct reference wins over a transitive one, so
+         this forces the patched build.
+
+         Kept even though SQLite is development-only: the CI dependency scan fails on high
+         severity regardless of which environment the package is used in, and "it is only
+         for local dev" is exactly the reasoning that leaves a vulnerable native library in
+         a shipped image. Remove this pin once the EF provider's own floor moves past it. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
 
