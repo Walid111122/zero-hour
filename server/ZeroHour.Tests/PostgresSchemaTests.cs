@@ -73,6 +73,13 @@ public sealed class PostgresSchemaTests : IClassFixture<PostgresFixture>
         // reset too, keeping assertions about generated ids stable.
         _fixture.Db?.Database.ExecuteSqlRaw(
             "TRUNCATE player_states, players RESTART IDENTITY CASCADE;");
+
+        // The context is shared for the whole class, so the previous test's entities are
+        // still being tracked. Leaving them means the same DeviceId hits the unique index
+        // again; the insert fails, and Npgsql's retrying execution strategy re-executes the
+        // batch — by then the context holds two entities with the same key, which surfaces
+        // as a confusing "cannot be tracked" error instead of the constraint violation.
+        _fixture.Db?.ChangeTracker.Clear();
     }
 
     [PostgresFact]
@@ -188,6 +195,10 @@ public sealed class PostgresSchemaTests : IClassFixture<PostgresFixture>
 
         Player second = NewPlayer();
         second.Email = null;
+
+        // device_id is unique too, so this has to differ or the test fails on the wrong
+        // constraint and proves nothing about NULL emails.
+        second.DeviceId = "device-2";
 
         db.Players.AddRange(first, second);
         db.SaveChanges();
