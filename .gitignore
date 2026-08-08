@@ -47,7 +47,10 @@ TestResults/
 artifacts/
 
 # ---------- Cline <-> Unity Bridge (runtime only, never committed) ----------
-bridge/
+# Leading slash anchors this to the repo root. Unanchored, it also swallowed
+# client/Assets/_Project/Scripts/Editor/Bridge/ — the Bridge *source*, which must be
+# committed. Git ignores silently, so the loss only surfaced on a restore.
+/bridge/
 
 # ---------- Unity batch-mode logs from scripted editor invocations ----------
 unity-*.log
