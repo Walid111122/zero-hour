@@ -14,9 +14,17 @@
       — the bridge rule **must** stay anchored; see the note at the end of 0.4
 - [x] `.gitattributes` — LFS for `*.png *.jpg *.psd *.fbx *.wav *.ogg *.mp3 *.ttf`, plus `* text=auto eol=lf`
 - [x] `README.md` — project summary, layout table, and the no-float rule stated up front
-- [ ] `LICENSE` decision (proprietary; keep third-party attributions in `docs/ATTRIBUTION.md`)
-- [ ] `docs/ATTRIBUTION.md` created empty with the table header (`18 §2`)
-- [ ] Branch policy: work on `main` solo, but never force-push
+- [~] `LICENSE` — proprietary, all rights reserved, with third-party terms explicitly
+      carved out and pointed at `docs/ATTRIBUTION.md`. **The copyright holder is still a
+      `<COPYRIGHT HOLDER>` placeholder** — it needs the legal name that will own the work,
+      which is your call, not a detail to guess at. Needs a lawyer's eye before the Phase 9
+      store submission either way
+- [x] `docs/ATTRIBUTION.md` — table headers per `18 §2` (asset, source, URL, licence, date,
+      whether an in-app credit is required), plus a licence quick-reference that flags CC-BY-NC
+      as unusable and CC-BY-SA as contagious. Both look permissive at a glance and are not
+- [x] Branch policy: work on `master` solo, never force-push. Note the branch is `master`,
+      not `main` — `git init` created it before the docs said otherwise, and CI triggers on
+      both, so this is a naming reality to record rather than a thing to fix
 
 ## 0.2 Solution & shared Sim
 
@@ -134,7 +142,11 @@ that actually answers the question.
 - [ ] EF Core with SQLite for local dev, Postgres provider ready
 - [ ] First migration: `players`, `player_states` (`15 §2`)
 - [ ] `docker-compose.yml` for local: app + postgres + redis
-- [ ] Config via environment variables; `.env.example` committed, `.env` gitignored
+- [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
+      template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
+      it; `!.env.example` re-includes it). Names use the ASP.NET Core `__` convention so
+      `IConfiguration` binds them with no parsing code. The server does not read most of them
+      yet — that lands with EF Core and Redis below
 
 **Auth note:** all three health endpoints are deliberately unauthenticated — they carry no
 player data and exist for load balancers and probes. The gameplay API in Phase 1 must not

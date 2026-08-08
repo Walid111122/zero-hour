@@ -1,0 +1,40 @@
+Copyright (c) 2026 <COPYRIGHT HOLDER>. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This software and its source code, assets, design documents, and accompanying
+materials (the "Software") are the proprietary and confidential property of the
+copyright holder.
+
+No licence is granted. Without the prior written permission of the copyright
+holder, you may not:
+
+  (a) copy, reproduce, or republish the Software, in whole or in part;
+  (b) distribute, sublicense, sell, rent, or lease the Software;
+  (c) modify the Software or create derivative works from it;
+  (d) reverse engineer, decompile, or disassemble the Software, except to the
+      extent that such restriction is prohibited by applicable law;
+  (e) remove or alter any copyright, trademark, or other proprietary notice.
+
+Third-party components included in or distributed with the Software remain
+subject to their own licence terms. Those components and their licences are
+recorded in docs/ATTRIBUTION.md, and nothing in this file limits the rights
+granted to you by their respective licences.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+ACTION REQUIRED: replace <COPYRIGHT HOLDER> above with the legal name that will
+own this work — your own name, or the company if one is incorporated before
+launch. "All rights reserved" with no named holder is weak, since it does not
+identify who holds the rights. This is a placeholder, not a decision.
+
+This file is not legal advice. Have a lawyer review it before the store
+submission in Phase 9, alongside the privacy policy and terms of service
+required by docs/22.
+--------------------------------------------------------------------------------
