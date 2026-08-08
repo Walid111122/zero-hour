@@ -155,10 +155,9 @@ inherit that pattern.
 passed — dependency scan 22 s, determinism suite 31 s. The earlier caveat that the workflow had
 never executed no longer applies.
 
-⚠ **Carried forward:** the run logged a deprecation notice — `actions/checkout@v4` and
-`actions/setup-dotnet@v4` target Node.js 20, which GitHub now force-runs on Node 24. Nothing is
-broken today, but these need bumping to `@v5` before the runners drop the shim. Tracked in 0.6
-rather than fixed now, because changing action versions deserves its own green run to confirm.
+The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
+`actions/setup-dotnet@v4` — GitHub was force-running them on Node 24. Both are now pinned to
+`@v5`, verified by a green run of their own so the bump is not taken on trust.
 
 ## 0.7 Your manual steps (`27 §2`)
 
