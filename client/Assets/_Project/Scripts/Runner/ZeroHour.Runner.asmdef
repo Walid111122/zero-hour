@@ -1,0 +1,17 @@
+﻿{
+    "name": "ZeroHour.Runner",
+    "rootNamespace": "ZeroHour.Runner",
+    "references": [
+        "ZeroHour.Core",
+        "ZeroHour.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

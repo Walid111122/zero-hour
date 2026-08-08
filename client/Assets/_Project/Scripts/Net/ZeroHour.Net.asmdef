@@ -1,0 +1,16 @@
+﻿{
+    "name": "ZeroHour.Net",
+    "rootNamespace": "ZeroHour.Net",
+    "references": [
+        "ZeroHour.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
