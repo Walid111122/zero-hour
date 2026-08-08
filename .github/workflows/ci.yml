@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more request it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sim:
+    name: Sim (determinism suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false # No art assets are needed to test the simulation.
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ZeroHour.slnx
+
+      # Warnings become errors in CI but not locally: a work-in-progress build should stay
+      # fast to iterate on, while nothing warning-shaped reaches master.
+      - name: Build
+        run: dotnet build ZeroHour.slnx --no-restore -c Release -warnaserror
+
+      # The determinism guards live in this suite. If a float, System.Random or DateTime
+      # ever lands in ZeroHour.Sim, this is what catches it — long before it becomes a
+      # desync that only reproduces on one device family, months from now.
+      - name: Test
+        run: dotnet test ZeroHour.slnx --no-build -c Release --verbosity normal
+
+  security:
+    name: Dependency scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ZeroHour.slnx
+
+      # A vulnerable transitive package should break the build, not sit in a report
+      # nobody opens. grep exits non-zero when it finds nothing, hence the inversion.
+      - name: Fail on vulnerable packages
+        run: |
+          dotnet list ZeroHour.slnx package --vulnerable --include-transitive > vuln.txt 2>&1
+          cat vuln.txt
+          if grep -qE '(High|Critical)' vuln.txt; then
+            echo "::error::High or critical severity vulnerability found."
+            exit 1
+          fi
