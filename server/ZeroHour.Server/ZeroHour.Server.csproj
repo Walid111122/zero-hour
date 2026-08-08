@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- The determinism rules that bind the sim apply here too: this project executes the
+         same authoritative logic, so a warning it raises is worth failing a build over. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same assembly the client runs (docs/14 §3). The server is authoritative, but both
+         sides executing identical code is what makes client prediction exact rather than
+         approximate. -->
+    <ProjectReference Include="..\..\shared\ZeroHour.Sim\ZeroHour.Sim.csproj" />
+  </ItemGroup>
+
+</Project>
