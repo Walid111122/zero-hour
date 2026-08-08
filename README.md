@@ -1,5 +1,7 @@
 # Zero Hour
 
+[![CI](https://github.com/Walid111122/zero-hour/actions/workflows/ci.yml/badge.svg)](https://github.com/Walid111122/zero-hour/actions/workflows/ci.yml)
+
 A post-apocalyptic 4X strategy game for mobile, built solo on a near-zero budget. It pairs a
 standalone lane-runner (the acquisition hook, playable on its own) with base building, hero
 collection, a shared world map, alliances with voice chat, and real-time arena rooms.
@@ -17,9 +19,9 @@ collection, a shared world map, alliances with voice chat, and real-time arena r
 | `checklists/` | Master checklist plus one detailed checklist per phase. |
 | `shared/ZeroHour.Sim/` | Deterministic simulation core. netstandard2.1, no Unity, no floats. |
 | `shared/ZeroHour.Sim.Tests/` | xUnit suite, including the determinism guards. |
-| `client/` | Unity project *(Phase 0, not yet created)*. |
-| `server/` | ASP.NET Core services *(Phase 0, not yet created)*. |
-| `tools/scripts/` | Build and Unity batch-mode helpers *(Phase 0)*. |
+| `client/` | Unity 6000.5.6f1 project, plus the editor-only Cline bridge. |
+| `server/` | ASP.NET Core 10 API, SignalR hub, EF Core schema, and its test suite. |
+| `tools/scripts/` | Build and Unity batch-mode helpers. |
 
 ## Build and test
 
@@ -49,6 +51,11 @@ than diagnosing it in production.
 
 ## Current status
 
-Phase A (documentation) complete. Phase 0 in progress: the deterministic sim core is built and
-tested; Unity client, server skeleton, Cline bridge and CI are next. See the master checklist
-for the authoritative state.
+Phase A (documentation) complete. Phase 0 largely done: the deterministic sim core, Unity
+client, Cline bridge, server skeleton and CI are all built and verified end to end. What
+remains is Docker Compose for local Postgres and Redis, Android player settings, and the
+nightly Unity CI job. See the master checklist for the authoritative state.
+
+`docker-compose.yml` is blocked on Docker being unavailable on the dev machine, so the
+Postgres coverage runs as a GitHub Actions service container instead. That is a real gap
+rather than a substitute: nothing has yet brought the full app-plus-database stack up locally.

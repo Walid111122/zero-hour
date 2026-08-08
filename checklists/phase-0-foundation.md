@@ -135,7 +135,10 @@ that actually answers the question.
       cheapest possible guard against a divergence that would otherwise appear as a desync.
 - [x] `GET /health/ready` → readiness, separate from liveness on purpose: a cache blip must not
       pull a healthy app node out of the load balancer
-- [ ] `GET /health/deep` → dependency checks (needs Postgres + Redis first)
+- [~] `GET /health/deep` → dependency checks. Postgres connectivity is in, returning **503**
+      rather than a 200 with a sad payload so monitoring need not parse JSON. It reports only
+      the exception *type*: the endpoint is unauthenticated and connection errors carry host,
+      database and sometimes user. Redis is not wired yet
 - [x] SignalR hub with an echo method (proves the realtime path) — `EchoHub` at `/hubs/echo`,
       MessagePack added per `16 §1`. **Verified against a running server, not just compiled:**
       a raw client drove `negotiate` → WebSocket → protocol handshake → `Echo` invocation and
@@ -148,8 +151,12 @@ that actually answers the question.
       confirmed by grepping the run's log for the string that was sent and finding nothing.
       A sink cannot un-log PII that the call site already interpolated, so the discipline has
       to live at the call sites
-- [~] `server/ZeroHour.Tests/` — xUnit project created, **9 schema tests green**. Testcontainers
-      is still outstanding and needs Docker; until then nothing here exercises real Postgres
+- [x] `server/ZeroHour.Tests/` — xUnit, **17 tests**: 9 on SQLite, 8 against a real Postgres 16
+      in CI. Testcontainers was the plan and needs Docker, which is unavailable here; a GitHub
+      Actions **service container** gets the same coverage without it. The Postgres tests skip
+      when `ConnectionStrings__Postgres` is absent, so local runs stay green — and because a
+      run where all 8 skipped looks identical to one where they passed, the CI job re-runs
+      them and **fails if any skipped**
 - [x] EF Core with SQLite for local dev, Postgres provider ready — provider chosen by which
       connection string is present, and the server **refuses to start on SQLite outside
       Development** rather than silently accepting writes that never reach the real database
@@ -158,7 +165,12 @@ that actually answers the question.
       (not `EnsureCreated`, which builds from the model and would pass even if the migration
       were broken) and asserting the constraints actually bite: duplicate `(player_id, state_id)`
       rejected, orphan FK rejected, duplicate email rejected while *multiple NULL* emails are
-      allowed, schema defaults applied, and deletion of a player with states refused
+      allowed, schema defaults applied, and deletion of a player with states refused.
+      **Confirmed against real Postgres**, which is the only thing that can prove the dialect:
+      `resources` is genuinely `jsonb` and queryable with `->>` (the same mapping silently
+      becomes `TEXT` on SQLite), `id` is `uuid`, `created_at` is `bigint` not `timestamptz`,
+      identity generates keys, and `ix_ps_power` really is `DESC` — an ascending index would
+      still answer a leaderboard query, by sorting the whole shard first
 - [ ] `docker-compose.yml` for local: app + postgres + redis
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
@@ -166,19 +178,22 @@ that actually answers the question.
       `IConfiguration` binds them with no parsing code. The server does not read most of them
       yet — that lands with EF Core and Redis below
 
-**Auth note:** all three health endpoints are deliberately unauthenticated — they carry no
+**Auth note:** all four health endpoints are deliberately unauthenticated — they carry no
 player data and exist for load balancers and probes. The gameplay API in Phase 1 must not
-inherit that pattern.
+inherit that pattern. `/health/deep` is the one to watch: it reaches a dependency, so its
+response body is kept to booleans and an exception type rather than anything descriptive.
 
 ## 0.6 CI (GitHub Actions)
 
 - [x] `sim` job — `dotnet test` on the solution, `-warnaserror`, 10-minute timeout
 - [x] `dotnet list package --vulnerable` fails the build on high/critical severity
 - [x] Least-privilege `permissions: contents: read`; concurrency cancels superseded runs
-- [ ] `server` job — `dotnet test server/` with Testcontainers (needs the test project first)
-- [ ] Secret scan on every push
+- [x] `server` job — Postgres 16 service container with a `pg_isready` health gate, plus a step
+      that fails the build if the Postgres tests skipped
+- [x] Secret scan on every push — gitleaks over **full history**, since a secret committed and
+      later removed is still leaked
 - [ ] `unity` job — nightly, GameCI, edit-mode tests + Android build artifact
-- [ ] Status badge in `README.md`
+- [x] Status badge in `README.md`
 
 **Verified 2026-08-08.** First push to `Walid111122/zero-hour` (private) triggered run
 [31248286269](https://github.com/Walid111122/zero-hour/actions/runs/31248286269) and both jobs
@@ -206,7 +221,8 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 ## Gate checklist
 
 - [x] `dotnet build` clean on the whole solution — 4 projects, 0 warnings under `-warnaserror`
-- [x] `dotnet test` green, sim tests under 1 s — 49 tests (40 sim in 60 ms, 9 schema in 1 s)
+- [x] `dotnet test` green, sim tests under 1 s — 57 tests (40 sim in 47 ms, 9 SQLite schema,
+      8 Postgres schema which skip locally and run in CI)
 - [x] Unity compiles with zero errors **and play mode is exercised** — Bootstrap runs and logs
       `Services ready in 1 ms (config v0)` then `Loaded 'Main'`
 - [x] Bridge round-trip verified: `ping` → `pong`; `compile`, `open_scene`, `enter_play`,
@@ -216,8 +232,8 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
       correctly reports "No active camera" rather than writing a black frame
 - [ ] Docker Compose brings up app + postgres + redis locally
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
-- [x] CI green on a fresh push — first run on `Walid111122/zero-hour` passed both jobs
-      (dependency scan 22 s, determinism suite 31 s)
+- [x] CI green on a fresh push — all **four** jobs pass on `Walid111122/zero-hour`:
+      sim, server (Postgres-backed), secret scan, dependency scan
 - [x] Git LFS tracking confirmed (`git lfs ls-files`) — `client/Assets/Plugins/ZeroHour.Sim/ZeroHour.Sim.dll`
 
 **Do not start Phase 1 until every box above is ticked.** Phase 0 is unglamorous, and the temptation to skip ahead to the fun part is strongest here. The bridge in particular pays for itself within days — without it, every Phase 1 iteration costs a manual round-trip.
