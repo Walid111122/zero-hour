@@ -147,7 +147,9 @@ namespace ZeroHour.Bridge
             }
 
             var failures = new List<string>();
+            var names = new List<string>();
             CollectFailures(result, failures);
+            CollectNames(result, names);
 
             int total = result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount;
 
@@ -171,7 +173,37 @@ namespace ZeroHour.Bridge
                 + ",\"skipped\":" + Json.Num(result.SkipCount)
                 + ",\"inconclusive\":" + Json.Num(result.InconclusiveCount)
                 + ",\"durationSeconds\":" + result.Duration.ToString("F3", CultureInfo.InvariantCulture)
-                + ",\"failures\":" + Json.Array(failures));
+                + ",\"failures\":" + Json.Array(failures)
+                + ",\"tests\":" + Json.StringArray(names));
+        }
+
+        /// <summary>
+        /// Lists every leaf test that ran, passed or not.
+        ///
+        /// Added because a run once reported five passing tests against four authored ones, and
+        /// a bare count gives you no way to tell whether that is a harmless synthetic node or a
+        /// stale duplicate assembly being discovered. Names make the discrepancy answer itself.
+        /// </summary>
+        private static void CollectNames(ITestResultAdaptor result, List<string> into)
+        {
+            const int MaxNames = 200;
+
+            if (into.Count >= MaxNames)
+            {
+                return;
+            }
+
+            if (result.HasChildren)
+            {
+                foreach (ITestResultAdaptor child in result.Children)
+                {
+                    CollectNames(child, into);
+                }
+
+                return;
+            }
+
+            into.Add(result.Test.FullName + " [" + result.TestStatus + "]");
         }
 
         private static void CollectFailures(ITestResultAdaptor result, List<string> into)
