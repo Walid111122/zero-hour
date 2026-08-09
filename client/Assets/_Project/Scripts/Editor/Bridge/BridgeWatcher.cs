@@ -27,10 +27,22 @@ namespace ZeroHour.Bridge
     public static class BridgeWatcher
     {
         private const double PollIntervalSeconds = 0.5;
+
+        // How long to wait for a requested compile to actually begin before concluding there
+        // was nothing to build. Unity queues compilation on a later editor update, so this only
+        // needs to outlast a few frames; it is not a timeout on the compile itself.
+        private const double CompileStartGraceSeconds = 4.0;
+
         private const string PendingIdKey = "ZeroHour.Bridge.PendingId";
         private const string PendingCommandKey = "ZeroHour.Bridge.PendingCommand";
 
         private static double _nextPoll;
+
+        // Set while waiting to see whether RequestScriptCompilation actually starts a compile.
+        // A domain reload wipes these, which is correct: if a reload happens, the reload path
+        // answers and this fallback is irrelevant.
+        private static bool _awaitingCompileStart;
+        private static double _compileStartDeadline;
 
         static BridgeWatcher()
         {
@@ -85,6 +97,8 @@ namespace ZeroHour.Bridge
             }
 
             _nextPoll = EditorApplication.timeSinceStartup + PollIntervalSeconds;
+
+            CheckCompileActuallyStarted();
 
             // Never consume a request mid-compile: the response would describe a stale state.
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -275,8 +289,59 @@ namespace ZeroHour.Bridge
             AssetDatabase.Refresh();
             CompilationPipeline.RequestScriptCompilation();
 
-            // The domain reload lands next; CompletePendingAcrossReload writes the response
-            // once the editor is back.
+            // Usually a domain reload lands next and CompletePendingAcrossReload answers. But
+            // when every assembly is already up to date Unity compiles nothing and never
+            // reloads, so that response would never be written and the caller would hang until
+            // it timed out. Watch for the compile actually starting rather than assuming it.
+            _awaitingCompileStart = true;
+            _compileStartDeadline = EditorApplication.timeSinceStartup + CompileStartGraceSeconds;
+        }
+
+        /// <summary>
+        /// Answers a pending `compile` that never produced a compile at all.
+        ///
+        /// Reporting "already up to date" is both true and far more useful than silence, which
+        /// from the caller's side is indistinguishable from a hung or dead editor.
+        /// </summary>
+        private static void CheckCompileActuallyStarted()
+        {
+            if (!_awaitingCompileStart)
+            {
+                return;
+            }
+
+            if (EditorApplication.isCompiling)
+            {
+                // Underway: the domain reload path owns the response from here.
+                _awaitingCompileStart = false;
+                return;
+            }
+
+            if (EditorApplication.timeSinceStartup < _compileStartDeadline)
+            {
+                return;
+            }
+
+            _awaitingCompileStart = false;
+
+            if (SessionState.GetString(PendingCommandKey, string.Empty) != "compile")
+            {
+                return;
+            }
+
+            string id = SessionState.GetString(PendingIdKey, string.Empty);
+            if (string.IsNullOrEmpty(id))
+            {
+                return;
+            }
+
+            SessionState.EraseString(PendingIdKey);
+            SessionState.EraseString(PendingCommandKey);
+
+            Respond(id, true, "Assemblies already up to date; nothing to compile.",
+                "\"recompiled\":" + Json.Bool(false)
+                + ",\"errorCount\":" + Json.Num(0)
+                + ",\"warningCount\":" + Json.Num(0));
         }
 
         private static void CompletePendingAcrossReload()
