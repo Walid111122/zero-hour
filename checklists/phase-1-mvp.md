@@ -11,9 +11,11 @@
 
 All of this is written and tested **without Unity** (`28 §3`).
 
-- [ ] `RunnerState` — squad count, unit tier, weapon level, HP, position, distance
-- [ ] `RunnerInput` — lane position as `Fixed`, per tick
-- [ ] `RunnerSim.Step(state, input, dt)` — pure, deterministic, fixed-point
+- [~] `RunnerState` — squad count, unit tier, weapon level, HP, position, distance. Tick, squad, X and distance are in and fingerprinted; HP arrives with combat
+
+- [x] `RunnerInput` — lane position as `Fixed`, per tick; clamped to the corridor at construction
+- [x] `RunnerSim.Step(state, input)` — pure, deterministic, fixed-point. **Signature deviates from the plan: no `dt`.** A caller-supplied delta is the standard way a deterministic sim stops being deterministic, since a client stepping at frame time and a server stepping at a fixed rate accumulate different rounding and honest players then fail reward validation. Tick length is fixed at 20 Hz (`RunnerTuning.TicksPerSecond`) and the view layer interpolates for rendering
+
 - [ ] `RunnerSim.Simulate(stageDef, inputLog, seed, stats)` → full result (for server re-validation, `20 §4`)
 - [x] Gate resolution: `+N`, `×N`, `−N`, `÷N`, weapon upgrade, type swap — `Runner/Gate.cs`, all 7 operators incl. `♥ Shield`; malformed gates throw at construction
 - [ ] Auto-fire: rate, damage, range derived from squad + weapon

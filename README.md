@@ -30,6 +30,27 @@ dotnet build ZeroHour.slnx
 dotnet test  ZeroHour.slnx
 ```
 
+### If every sim test fails at once on Windows
+
+A whole-suite failure with `FileLoadException ... An Application Control policy has
+blocked this file (0x800711C7)` is Windows Smart App Control refusing to load the freshly
+built, unsigned `ZeroHour.Sim.dll`. It is an OS policy decision rather than a code fault —
+the same commit passes in CI. Confirm it with:
+
+```powershell
+Get-WinEvent -LogName Microsoft-Windows-CodeIntegrity/Operational -MaxEvents 20
+```
+
+Run the suite in a container instead, which leaves the machine and the working tree alone:
+
+```powershell
+pwsh tools/scripts/test-sim-docker.ps1
+```
+
+Turning Smart App Control off in Windows Security under "App & browser control" also fixes
+it permanently, but that switch is irreversible without reinstalling Windows, so decide
+deliberately rather than as a build step.
+
 The simulation suite is expected to stay under one second. If it creeps past that, the
 feedback loop degrades and the tests stop getting run.
 
