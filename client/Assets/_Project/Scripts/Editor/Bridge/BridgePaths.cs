@@ -30,6 +30,12 @@ namespace ZeroHour.Bridge
         public static string ConsoleLog => Path.Combine(Root, "console.log");
         public static string Screenshot => Path.Combine(Root, "screenshot.png");
 
+        /// <summary>
+        /// Append-only diagnostic trace. Separate from <see cref="ConsoleLog"/> because it must
+        /// survive domain reloads, which wipe the in-memory console buffer.
+        /// </summary>
+        public static string TraceLog   => Path.Combine(Root, "trace.log");
+
         public static void EnsureDirectory()
         {
             if (!Directory.Exists(Root))

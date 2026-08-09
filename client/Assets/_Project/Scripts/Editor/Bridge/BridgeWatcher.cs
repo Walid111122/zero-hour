@@ -36,22 +36,55 @@ namespace ZeroHour.Bridge
         private const string PendingIdKey = "ZeroHour.Bridge.PendingId";
         private const string PendingCommandKey = "ZeroHour.Bridge.PendingCommand";
 
+        // Tracks how far a pending compile has got: "requested" until compilation is observed
+        // to start, then "started". Held in SessionState rather than a static because the whole
+        // point is to still know this on the far side of a domain reload.
+        private const string CompileStateKey = "ZeroHour.Bridge.CompileState";
+
         private static double _nextPoll;
 
-        // Set while waiting to see whether RequestScriptCompilation actually starts a compile.
-        // A domain reload wipes these, which is correct: if a reload happens, the reload path
-        // answers and this fallback is irrelevant.
-        private static bool _awaitingCompileStart;
+        // Deadline for a requested compile to begin. Only meaningful before compilation starts,
+        // which is also the only window in which no reload can have happened, so a static is
+        // safe here.
         private static double _compileStartDeadline;
+
+        /// <summary>
+        /// Appends a line to <c>bridge/trace.log</c>.
+        ///
+        /// Diagnosing anything that spans a domain reload needs a sink that survives one, which
+        /// rules out both the console buffer (a static, wiped by the reload) and Debug.Log
+        /// (Editor.log was not being flushed while the editor ran unfocused). A file is crude
+        /// and works.
+        /// </summary>
+        internal static void Trace(string line)
+        {
+            try
+            {
+                BridgePaths.EnsureDirectory();
+                File.AppendAllText(BridgePaths.TraceLog,
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
+                    + "  " + line + Environment.NewLine);
+            }
+            catch
+            {
+                // Tracing must never break the command it is tracing.
+            }
+        }
 
         static BridgeWatcher()
         {
             EditorApplication.update -= Tick;
             EditorApplication.update += Tick;
 
-            // A compile or play-mode change reloads the domain and wipes this class's state,
-            // so a command that spans a reload parks its id in SessionState and completes here.
-            EditorApplication.delayCall += CompletePendingAcrossReload;
+            Trace("domain loaded; pendingId='"
+                + SessionState.GetString(PendingIdKey, string.Empty) + "' pendingCommand='"
+                + SessionState.GetString(PendingCommandKey, string.Empty) + "'");
+
+            // Note there is deliberately no `delayCall` hook for finishing a compile. That was
+            // the original design and it silently dropped responses: delayCall is single-shot,
+            // and a compile here reliably produces *two* domain reloads in close succession, so
+            // the callback registered by the first reload is discarded by the second before it
+            // ever runs. Completion is polled from Tick instead, which cannot be lost.
 
             // Play-mode transitions are completed from the state-change event rather than the
             // domain reload above. "Enter Play Mode Options" lets the project disable the
@@ -98,7 +131,7 @@ namespace ZeroHour.Bridge
 
             _nextPoll = EditorApplication.timeSinceStartup + PollIntervalSeconds;
 
-            CheckCompileActuallyStarted();
+            CheckPendingCompile();
 
             // Never consume a request mid-compile: the response would describe a stale state.
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -204,10 +237,9 @@ namespace ZeroHour.Bridge
         /// <summary>
         /// Enters or leaves play mode, answering immediately when already in the target state.
         ///
-        /// The deferred path relies on the domain reload that a play-mode transition triggers to
-        /// run <see cref="CompletePendingAcrossReload"/>. Asking for a state the editor is
-        /// already in produces no transition and therefore no reload, so parking the id would
-        /// leave the caller waiting for a response that is never written.
+        /// The deferred path relies on <see cref="OnPlayModeChanged"/> firing. Asking for a state
+        /// the editor is already in produces no transition and therefore no event, so parking the
+        /// id would leave the caller waiting for a response that is never written.
         /// </summary>
         private static void SetPlaying(string id, bool play)
         {
@@ -285,118 +317,109 @@ namespace ZeroHour.Bridge
 
             SessionState.SetString(PendingIdKey, id);
             SessionState.SetString(PendingCommandKey, "compile");
+            SessionState.SetString(CompileStateKey, "requested");
+
+            Trace("BeginCompile id=" + id + "; requesting compilation");
+
+            _compileStartDeadline = EditorApplication.timeSinceStartup + CompileStartGraceSeconds;
 
             AssetDatabase.Refresh();
             CompilationPipeline.RequestScriptCompilation();
-
-            // Usually a domain reload lands next and CompletePendingAcrossReload answers. But
-            // when every assembly is already up to date Unity compiles nothing and never
-            // reloads, so that response would never be written and the caller would hang until
-            // it timed out. Watch for the compile actually starting rather than assuming it.
-            _awaitingCompileStart = true;
-            _compileStartDeadline = EditorApplication.timeSinceStartup + CompileStartGraceSeconds;
         }
 
         /// <summary>
-        /// Answers a pending `compile` that never produced a compile at all.
+        /// Drives a pending `compile` to a response, polled from <see cref="Tick"/>.
         ///
-        /// Reporting "already up to date" is both true and far more useful than silence, which
-        /// from the caller's side is indistinguishable from a hung or dead editor.
+        /// Polling rather than a completion callback because every callback-shaped option is
+        /// destroyed by the very domain reload it is waiting on. There are three outcomes and
+        /// all of them must produce a response:
+        ///
+        /// - compilation starts, then finishes (possibly across several reloads) → real result;
+        /// - compilation never starts because everything is up to date → "nothing to compile";
+        /// - the editor is mid-reload → keep waiting.
         /// </summary>
-        private static void CheckCompileActuallyStarted()
+        private static void CheckPendingCompile()
         {
-            if (!_awaitingCompileStart)
+            string state = SessionState.GetString(CompileStateKey, string.Empty);
+            if (string.IsNullOrEmpty(state))
             {
                 return;
             }
 
-            if (EditorApplication.isCompiling)
+            if (state == "requested")
             {
-                // Underway: the domain reload path owns the response from here.
-                _awaitingCompileStart = false;
-                return;
-            }
-
-            if (EditorApplication.timeSinceStartup < _compileStartDeadline)
-            {
-                return;
-            }
-
-            _awaitingCompileStart = false;
-
-            if (SessionState.GetString(PendingCommandKey, string.Empty) != "compile")
-            {
-                return;
-            }
-
-            string id = SessionState.GetString(PendingIdKey, string.Empty);
-            if (string.IsNullOrEmpty(id))
-            {
-                return;
-            }
-
-            SessionState.EraseString(PendingIdKey);
-            SessionState.EraseString(PendingCommandKey);
-
-            Respond(id, true, "Assemblies already up to date; nothing to compile.",
-                "\"recompiled\":" + Json.Bool(false)
-                + ",\"errorCount\":" + Json.Num(0)
-                + ",\"warningCount\":" + Json.Num(0));
-        }
-
-        private static void CompletePendingAcrossReload()
-        {
-            string id = SessionState.GetString(PendingIdKey, string.Empty);
-            string command = SessionState.GetString(PendingCommandKey, string.Empty);
-
-            if (string.IsNullOrEmpty(id))
-            {
-                return;
-            }
-
-            SessionState.EraseString(PendingIdKey);
-            SessionState.EraseString(PendingCommandKey);
-
-            switch (command)
-            {
-                case "compile":
+                if (EditorApplication.isCompiling)
                 {
-                    var errors = new List<string>();
-                    var warnings = new List<string>();
-
-                    foreach (BridgeLogEntry entry in BridgeConsole.Recent(200))
-                    {
-                        if (entry.message.Contains("error CS"))
-                        {
-                            errors.Add(Json.Str(entry.message));
-                        }
-                        else if (entry.message.Contains("warning CS"))
-                        {
-                            warnings.Add(Json.Str(entry.message));
-                        }
-                    }
-
-                    string extra = "\"errorCount\":" + Json.Num(errors.Count)
-                                 + ",\"warningCount\":" + Json.Num(warnings.Count)
-                                 + ",\"errors\":" + Json.Array(errors)
-                                 + ",\"warnings\":" + Json.Array(warnings);
-
-                    Respond(id, errors.Count == 0,
-                        errors.Count == 0 ? "Compiled cleanly." : "Compilation produced errors.",
-                        extra);
-                    break;
+                    Trace("compile started");
+                    SessionState.SetString(CompileStateKey, "started");
+                    return;
                 }
 
-                case "enter_play":
-                    Respond(id, Application.isPlaying,
-                        Application.isPlaying ? "Entered play mode." : "Failed to enter play mode.");
-                    break;
+                // The deadline is a static, so a reload resets it to zero and this branch is
+                // skipped — correct, because a reload proves compilation did happen.
+                if (_compileStartDeadline > 0
+                    && EditorApplication.timeSinceStartup >= _compileStartDeadline)
+                {
+                    Trace("no compile started within grace; reporting up to date");
+                    FinishCompile(true, "Assemblies already up to date; nothing to compile.", false);
+                }
 
-                case "exit_play":
-                    Respond(id, !Application.isPlaying, "Exited play mode.",
-                        "\"errorCount\":" + Json.Num(BridgeConsole.ErrorCount()));
-                    break;
+                return;
             }
+
+            // state == "started": wait for compilation to drain, then report.
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                return;
+            }
+
+            Trace("compile finished; writing response");
+            FinishCompile(null, null, true);
+        }
+
+        /// <summary>
+        /// Writes the response for a pending compile and clears its state.
+        /// <paramref name="ok"/> and <paramref name="message"/> are null when the outcome should
+        /// be derived from the console buffer.
+        /// </summary>
+        private static void FinishCompile(bool? ok, string message, bool recompiled)
+        {
+            string id = SessionState.GetString(PendingIdKey, string.Empty);
+
+            SessionState.EraseString(PendingIdKey);
+            SessionState.EraseString(PendingCommandKey);
+            SessionState.EraseString(CompileStateKey);
+
+            if (string.IsNullOrEmpty(id))
+            {
+                return;
+            }
+
+            var errors = new List<string>();
+            var warnings = new List<string>();
+
+            foreach (BridgeLogEntry entry in BridgeConsole.Recent(200))
+            {
+                if (entry.message.Contains("error CS"))
+                {
+                    errors.Add(Json.Str(entry.message));
+                }
+                else if (entry.message.Contains("warning CS"))
+                {
+                    warnings.Add(Json.Str(entry.message));
+                }
+            }
+
+            string extra = "\"recompiled\":" + Json.Bool(recompiled)
+                         + ",\"errorCount\":" + Json.Num(errors.Count)
+                         + ",\"warningCount\":" + Json.Num(warnings.Count)
+                         + ",\"errors\":" + Json.Array(errors)
+                         + ",\"warnings\":" + Json.Array(warnings);
+
+            Respond(id,
+                ok ?? errors.Count == 0,
+                message ?? (errors.Count == 0 ? "Compiled cleanly." : "Compilation produced errors."),
+                extra);
         }
 
         // ---------- logs ----------
