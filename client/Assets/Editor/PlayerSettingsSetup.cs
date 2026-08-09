@@ -57,6 +57,55 @@ namespace ZeroHour.EditorTools
                 $"targetSdk {(int)PlayerSettings.Android.targetSdkVersion}");
         }
 
+        /// <summary>
+        /// Forces Active Input Handling to a single backend (Input System package).
+        ///
+        /// "Both" (`activeInputHandler: 2`) is what the project was left on, and Unity **refuses
+        /// to build Android with it** — `BuildPlayer` throws
+        /// "Active Input Handling is set to Both, this is unsupported on Android ... Cancelling".
+        /// WebGL and the editor accept it happily, so nothing catches this until a build targets
+        /// the shipping platform.
+        ///
+        /// There is no `PlayerSettings` property for this flag, so it goes through the serialized
+        /// singleton like the quality tiers. Two things to know:
+        ///  - the change needs an **editor restart** to take effect, and Unity asks for that with
+        ///    a modal dialog, so this cannot run unattended from the bridge;
+        ///  - a modal is also how the build failure was reported, which is why a build driven
+        ///    through the bridge can appear to hang for hours with the answer on screen.
+        /// </summary>
+        [MenuItem("Zero Hour/Setup/Force Single Input Handling")]
+        public static void ForceSingleInputHandling()
+        {
+            const int inputSystemPackage = 1;
+
+            Object singleton = Unsupported.GetSerializedAssetInterfaceSingleton("PlayerSettings");
+            SerializedObject so = new(singleton);
+
+            SerializedProperty handler = so.FindProperty("activeInputHandler");
+            if (handler == null)
+            {
+                Debug.LogError(
+                    "[PlayerSettings] activeInputHandler missing — Unity changed the asset layout. " +
+                    "Set Project Settings > Player > Active Input Handling to 'Input System Package' by hand.");
+                return;
+            }
+
+            if (handler.intValue == inputSystemPackage)
+            {
+                Debug.Log("[PlayerSettings] Active Input Handling already 'Input System Package' (1) — no change.");
+                return;
+            }
+
+            int previous = handler.intValue;
+            handler.intValue = inputSystemPackage;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+
+            Debug.LogWarning(
+                $"[PlayerSettings] Active Input Handling {previous} -> {inputSystemPackage} (Input System Package). " +
+                "RESTART THE EDITOR before building: the backend switch only takes effect on reload.");
+        }
+
         // Quality levels can only be added or removed through the serialized asset. The runtime
         // API cannot do it: QualitySettings.names returns a *copy*, so assigning into it silently
         // does nothing, and Increase/DecreaseLevel change which level is active rather than how
@@ -218,6 +267,19 @@ namespace ZeroHour.EditorTools
                 problems.Add($"targetSdk {PlayerSettings.Android.targetSdkVersion}, expected 35");
             }
 
+            // Read straight from the serialized asset: there is no PlayerSettings accessor, and
+            // this is the setting that cancels an Android build outright.
+            SerializedObject playerSettings = new(Unsupported.GetSerializedAssetInterfaceSingleton("PlayerSettings"));
+            SerializedProperty handler = playerSettings.FindProperty("activeInputHandler");
+            if (handler == null)
+            {
+                problems.Add("activeInputHandler not found — cannot verify Active Input Handling");
+            }
+            else if (handler.intValue == 2)
+            {
+                problems.Add("Active Input Handling is 'Both' (2), which Android refuses to build — run Force Single Input Handling");
+            }
+
             string[] names = QualitySettings.names;
             if (names.Length != 3 || names[0] != "Low" || names[1] != "Medium" || names[2] != "High")
             {
@@ -229,6 +291,7 @@ namespace ZeroHour.EditorTools
                 Debug.Log(
                     "[Verify] OK — portrait, IL2CPP, ARM64, " +
                     $"SDK {(int)PlayerSettings.Android.minSdkVersion}-{(int)PlayerSettings.Android.targetSdkVersion}, " +
+                    $"input handling {(handler == null ? "?" : handler.intValue.ToString())}, " +
                     $"tiers [{string.Join(", ", names)}]");
             }
             else

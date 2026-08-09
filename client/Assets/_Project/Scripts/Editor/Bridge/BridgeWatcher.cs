@@ -226,6 +226,14 @@ namespace ZeroHour.Bridge
                     OpenSceneByPath(request.id, request.argString);
                     break;
 
+                case "build_android":
+                case "build_webgl":
+                    // Synchronous and slow: this blocks the editor for minutes and the response
+                    // is written only when the build finishes. argString "dev" adds a
+                    // development build with debugging enabled.
+                    BridgeBuilder.Begin(request.id, request.command, request.argString);
+                    break;
+
                 default:
                     // Closed allowlist: unknown commands are refused, not guessed at.
                     Respond(request.id, false, "Unknown command '" + request.command + "'.");

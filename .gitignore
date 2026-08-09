@@ -8,6 +8,12 @@ client/Logs/
 client/UserSettings/
 client/MemoryCaptures/
 client/Recordings/
+
+# Burst intermediates from a WebGL player build. Note this lands in client/Data/,
+# *outside* client/Build/, so the build-output rule above does not cover it — found
+# only because a build was actually run and `git status` then showed it untracked.
+client/Data/
+
 client/[Aa]ssets/AssetStoreTools*
 client/[Aa]ssets/Plugins/Editor/JetBrains*
 

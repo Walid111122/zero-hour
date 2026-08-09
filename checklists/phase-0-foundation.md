@@ -142,7 +142,42 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
 - [x] Command: `open_scene` — path-guarded to `.unity` files under `Assets/`, no `..` segments.
       Play mode runs the *currently open* scene rather than build index 0, so driving play
       remotely is only meaningful if the scene can be selected first
-- [ ] Command: `build_webgl` / `build_android`
+- [~] Command: `build_webgl` / `build_android` — `BridgeBuilder`, allowlisted, reporting
+      `result`, error/warning counts, output bytes and duration.
+
+      **WebGL passes:** 13,903,080 bytes in 7m46s, 0 errors, both scenes included. The
+      response reports bytes read back off disk rather than Unity's summary, since a
+      "Succeeded" result with no artifact is exactly the failure worth catching.
+
+      That build also drops Burst intermediates in **`client/Data/`** — *outside* the ignored
+      `client/Build/`, so they showed up untracked and would have been committed. Now ignored.
+
+      **Android fails, and the reason is a real project defect, not a bridge bug:**
+      `PlayerSettings->Active Input Handling is set to Both, this is unsupported on Android`.
+      Unity cancels the build outright. `activeInputHandler: 2` ("Both") is the value 0.3 left
+      behind; it is fine for WebGL and for the editor, which is why nothing caught it until a
+      build actually targeted the shipping platform. WebGL passing proves less than it appears.
+
+      Two process lessons, both from getting this wrong first:
+      *The build hung for 3h23m and the hang was not the bug.* Unity raised its error through a
+      **modal dialog**, so `BuildPipeline.BuildPlayer` never returned and the bridge never
+      answered — the failure was sitting on screen the whole time, waiting for a human. The
+      build only reported `Failed` once the dialog was dismissed by hand. Any build driven
+      through the bridge can therefore stall indefinitely on a GUI prompt, and a stalled build
+      is indistinguishable from a slow one without checking whether the editor is burning CPU
+      (it was idle at 0.6s per 60s wall).
+      *And the dialog title lied.* It read "Unsupported Input Handling", which I read as the
+      familiar "new Input System installed, old backend active" prompt and diagnosed from the
+      title alone. The setting was already "Both"; the actual message said the opposite of what
+      I assumed. `get_logs` had the exception in full, and reading it first would have skipped
+      the wrong theory entirely
+- [ ] Set Active Input Handling to a single backend (**Input System Package**, value `1`) in
+      `PlayerSettingsSetup` and re-run the Android build. No project script references
+      `UnityEngine.InputSystem` yet and none uses the legacy `Input` class, so nothing should
+      break — but the change requires an **editor restart** to take effect, and Unity prompts
+      for that restart with another modal, so it cannot be driven from the bridge unattended
+- [ ] Add a build-time guard that fails fast on settings Unity rejects per platform, rather
+      than discovering them 3 hours into a build. Active Input Handling is the known one today
 - [ ] Command: `generate_so` — CSV → ScriptableObject instances
 - [x] Fixed command allowlist, **no arbitrary code execution**
 - [x] Verified excluded from player builds — editor-only asmdef; `bridge/` is gitignored
@@ -317,7 +352,10 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 
 ## 0.7 Your manual steps (`27 §2`)
 
-- [ ] Install Unity Hub + **6000.5.6f1** with Android + WebGL modules
+- [x] Install Unity Hub + **6000.5.6f1** with Android + WebGL modules — confirmed on disk:
+      `AndroidPlayer`, `WebGLSupport` and `windowsstandalonesupport` under the editor's
+      `PlaybackEngines`. Both target modules are what make the `build_*` bridge commands
+      possible at all
 - [ ] Sign in to Unity (Personal licence)
 - [ ] Open `f:\last war build\client`, wait out the first import
 - [ ] Install the packages Cline lists
