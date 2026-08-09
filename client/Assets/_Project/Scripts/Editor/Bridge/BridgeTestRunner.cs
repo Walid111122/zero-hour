@@ -257,6 +257,14 @@ namespace ZeroHour.Bridge
                 return;
             }
 
+            // A suite with no children is still a suite, not a test. An empty play-mode run
+            // reported `client [Passed]` — the project root node, childless because nothing
+            // matched — which reads as a phantom passing test in an otherwise empty run.
+            if (result.Test.IsSuite)
+            {
+                return;
+            }
+
             into.Add(result.Test.FullName + " [" + result.TestStatus + "]");
         }
 

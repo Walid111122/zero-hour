@@ -106,7 +106,33 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
 - [x] Command: `compile` — returns errors/warnings, survives the domain reload
 - [x] Command: `refresh`
 - [x] Command: `enter_play` / `exit_play` with error count
-- [ ] Command: `run_tests` (edit + play mode, per-test results)
+- [x] Command: `run_tests` (edit + play mode, per-test results) — 4 edit-mode tests in ~1 s,
+      3 play-mode tests in ~0.2 s, both driven end to end through the bridge.
+
+      The hard part is that `TestRunnerApi` keeps its callbacks in statics, which a domain
+      reload wipes — so results arrive on a `ScriptableObject` re-registered from
+      `InitializeOnLoadMethod` whenever a run is still pending. A run matching **zero** tests is
+      deliberately reported as a *failure*: all-zero counts are otherwise indistinguishable from
+      green, the same trap the Postgres suite hit in CI.
+
+      Discovery is filtered to assemblies under `Assets/` that reference NUnit. Unfiltered, the
+      run also executes tests shipped **inside packages** — Addressables contributes
+      `AddressableAssets.DocExampleCode.TestStub.RequiredTest`, which is why a run once reported
+      5 passing against 4 authored tests. Left alone, a package author's test could turn this
+      build red for code we do not own. The list is derived from `CompilationPipeline` rather
+      than hardcoded, because the failure mode of a hardcoded list is a new test assembly that
+      silently never runs
+- [x] Play-mode tests exist and cover what edit mode cannot — `ZeroHour.Tests.PlayMode`:
+      Bootstrap's full startup path (async init, `DontDestroyOnLoad`, additive load of Main),
+      monotonic clock advance across frames, and EventBus isolating a throwing subscriber.
+      Until now Bootstrap was only ever verified by a human pressing Play and reading the
+      console.
+
+      **The first run failed, and the failure was worth having.** The test waited on
+      `ServiceLocator.IsReady` before asserting Main was loaded — but Bootstrap calls
+      `ServiceLocator.Set` *before* awaiting config and *before* loading Main, so the wait
+      returned while startup was still in flight. `IsReady` means "registration happened", not
+      "startup finished". Anything waiting on startup must wait on the last step, not the first
 - [x] Command: `get_logs`
 - [x] Command: `screenshot` → PNG via an explicit camera render (1080×1920).
       `ScreenCapture.CaptureScreenshot` was tried first and silently produced no file in the
@@ -302,7 +328,11 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 - [x] Unity compiles with zero errors **and play mode is exercised** — Bootstrap runs and logs
       `Services ready in 1 ms (config v0)` then `Loaded 'Main'`
 - [x] Bridge round-trip verified: `ping` → `pong`; `compile`, `open_scene`, `enter_play`,
-      `exit_play`, `scene_dump`, `get_logs` and `clear_logs` all driven end to end
+      `exit_play`, `scene_dump`, `get_logs`, `clear_logs` and `run_tests` (both modes) all
+      driven end to end
+- [x] Automated coverage of the startup path — play-mode tests assert what "press Play and read
+      the console" used to. That manual check is still listed in 0.7 and is no longer the only
+      thing standing between a broken Bootstrap and a green board
 - [x] Bridge `screenshot` produces a viewable PNG — 30.9 KB, header `89 50 4E 47`, captured
       from `Main Camera`. Note that `Boot.unity` has no camera by design, so a capture there
       correctly reports "No active camera" rather than writing a black frame
