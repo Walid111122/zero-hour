@@ -228,7 +228,21 @@ response body is kept to booleans and an exception type rather than anything des
       that fails the build if the Postgres tests skipped
 - [x] Secret scan on every push — gitleaks over **full history**, since a secret committed and
       later removed is still leaked
-- [ ] `unity` job — nightly, GameCI, edit-mode tests + Android build artifact
+- [~] `unity` job — nightly, GameCI, edit-mode tests + Android build artifact.
+      `.github/workflows/unity-nightly.yml`: 03:00 UTC plus `workflow_dispatch`, edit-mode tests
+      then an unsigned APK, `client/Library` cached against the manifest and player settings.
+      Both jobs build `ZeroHour.Sim.dll` first — it is a build artifact rather than tracked
+      source, so the client cannot compile without it, and rebuilding here also catches a stale
+      local copy. **Cannot be ticked yet: it has never executed.** GameCI needs an activated
+      licence and `UNITY_LICENSE` is not set, so the run would fail on activation, not on
+      anything the workflow controls. Two things *were* checked rather than assumed: the YAML
+      parses (3 jobs, triggers `schedule` + `workflow_dispatch`), and GameCI genuinely publishes
+      an editor image for this exact version — `ubuntu-6000.5.6f1-android-3.2.2` exists on
+      Docker Hub, which was the real risk given how new 6000.5.x is. The jobs are gated behind
+      a `guard` job that skips them with a notice when the licence is absent, because the
+      `secrets` context is unavailable in a job-level `if`, and a nightly that fails red every
+      night is a nightly nobody reads. Verify by adding the secret and dispatching it manually
+      rather than waiting for 03:00
 - [x] Status badge in `README.md`
 
 **Verified 2026-08-08.** First push to `Walid111122/zero-hour` (private) triggered run

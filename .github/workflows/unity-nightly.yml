@@ -1,0 +1,135 @@
+name: Unity (nightly)
+
+# Unity runs nightly rather than per-push: the editor image is ~10 GB and a build takes tens of
+# minutes, which is too slow for a feedback loop but fine as an overnight regression net.
+on:
+  schedule:
+    # 03:00 UTC daily. Scheduled workflows only run on the default branch.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # GameCI needs an activated licence. The `secrets` context is not available in a job-level
+  # `if`, so the check happens in a step and is published as an output. Without this the
+  # nightly would fail red every night until the licence is configured, and a job that is
+  # always red is a job nobody reads.
+  guard:
+    name: Licence configured?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      licensed: ${{ steps.check.outputs.licensed }}
+    steps:
+      - id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then
+            echo "licensed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "licensed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::UNITY_LICENSE is not set — skipping Unity jobs. See 27 §2 for activation."
+          fi
+
+  tests:
+    name: Edit-mode tests
+    needs: guard
+    if: needs.guard.outputs.licensed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      # The Sim DLL is a build artifact, not a committed source file, so the client will not
+      # compile without it. Building here rather than trusting the copy in Assets/Plugins also
+      # means the nightly catches a stale DLL that a local run forgot to refresh.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build shared Sim into the client
+        run: |
+          dotnet test shared/ZeroHour.Sim.Tests -c Release
+          dotnet publish shared/ZeroHour.Sim -c Release -o /tmp/sim
+          mkdir -p client/Assets/Plugins/ZeroHour.Sim
+          cp /tmp/sim/ZeroHour.Sim.dll client/Assets/Plugins/ZeroHour.Sim/
+
+      # Library/ is gitignored and costs ~10 min to regenerate, so cache it keyed on the
+      # settings and packages that invalidate it.
+      - uses: actions/cache@v4
+        with:
+          path: client/Library
+          key: Library-${{ hashFiles('client/Packages/manifest.json', 'client/ProjectSettings/ProjectSettings.asset') }}
+          restore-keys: |
+            Library-
+
+      - uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: client
+          unityVersion: 6000.5.6f1
+          testMode: editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  build-android:
+    name: Android build
+    needs: [guard, tests]
+    if: needs.guard.outputs.licensed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build shared Sim into the client
+        run: |
+          dotnet publish shared/ZeroHour.Sim -c Release -o /tmp/sim
+          mkdir -p client/Assets/Plugins/ZeroHour.Sim
+          cp /tmp/sim/ZeroHour.Sim.dll client/Assets/Plugins/ZeroHour.Sim/
+
+      - uses: actions/cache@v4
+        with:
+          path: client/Library
+          key: Library-android-${{ hashFiles('client/Packages/manifest.json', 'client/ProjectSettings/ProjectSettings.asset') }}
+          restore-keys: |
+            Library-android-
+            Library-
+
+      # Unsigned APK: this artifact exists to prove the project still compiles to a device
+      # target under IL2CPP, which is where scripting-backend and stripping breakage shows up
+      # first. Signing belongs with the release pipeline in Phase 9, not here.
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: client
+          unityVersion: 6000.5.6f1
+          targetPlatform: Android
+          androidExportType: androidPackage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/Android
+          retention-days: 14
