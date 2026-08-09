@@ -40,9 +40,16 @@ public sealed class PostgresDesignTimeFactory : IDesignTimeDbContextFactory<Post
     {
         DbContextOptionsBuilder<PostgresGameDbContext> options = new();
 
-        // Never connected to at design time — EF only needs the provider to pick a dialect.
-        // A real credential here would be both pointless and a secret in source control.
-        options.UseNpgsql("Host=localhost;Database=zerohour;Username=postgres");
+        // `migrations add` never opens a connection — it only needs the provider to pick a
+        // dialect, so a placeholder is enough and a real credential in source would be a leak.
+        // `database update` **does** connect, though, and a hardcoded placeholder makes that
+        // command permanently impossible ("No password has been provided"). So honour the same
+        // environment variable the app reads, and fall back to the placeholder for scaffolding.
+        string? fromEnv = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres");
+
+        options.UseNpgsql(string.IsNullOrWhiteSpace(fromEnv)
+            ? "Host=localhost;Database=zerohour;Username=postgres"
+            : fromEnv);
 
         return new PostgresGameDbContext(options.Options);
     }

@@ -152,8 +152,11 @@ that actually answers the question.
       A sink cannot un-log PII that the call site already interpolated, so the discipline has
       to live at the call sites
 - [x] `server/ZeroHour.Tests/` — xUnit, **17 tests**: 9 on SQLite, 8 against a real Postgres 16
-      in CI. Testcontainers was the plan and needs Docker, which is unavailable here; a GitHub
-      Actions **service container** gets the same coverage without it. The Postgres tests skip
+      in CI. Testcontainers was the plan and needs Docker, which was unavailable when these
+      were written; a GitHub Actions **service container** gets the same coverage without it.
+      Docker now works locally, so Testcontainers is available if it ever earns its keep — but
+      the service container already covers the dialect, so switching would add a dependency
+      without adding a fact. The Postgres tests skip
       when `ConnectionStrings__Postgres` is absent, so local runs stay green — and because a
       run where all 8 skipped looks identical to one where they passed, the CI job re-runs
       them and **fails if any skipped**
@@ -171,14 +174,20 @@ that actually answers the question.
       becomes `TEXT` on SQLite), `id` is `uuid`, `created_at` is `bigint` not `timestamptz`,
       identity generates keys, and `ix_ps_power` really is `DESC` — an ascending index would
       still answer a leaderboard query, by sorting the whole shard first
-- [~] **`docker-compose.yml` — config validated, stack never started.** Multi-stage Dockerfile
-      (SDK build + aspnet runtime, non-root), Postgres 16 + Redis 7-alpine with health gates,
-      and a `.dockerignore` that keeps Unity's import cache out of the build context. What is
-      genuinely proven: `docker compose config` parses and interpolates cleanly under Docker
-      29.6.2, and the `${VAR:?}` guards **fail the run when a required secret is missing** —
-      verified with an `--env-file` that omits `POSTGRES_PASSWORD`, which errors with
-      `required variable POSTGRES_PASSWORD`. What is *not* proven: the image has never been
-      built and no container has ever run
+- [x] **`docker-compose.yml` — verified running.** Multi-stage Dockerfile (SDK build + aspnet
+      runtime, non-root), Postgres 16 + Redis 7-alpine with health gates, and a `.dockerignore`
+      that keeps Unity's import cache out of the build context. Image builds in ~2 min to
+      422 MB; all three containers reach `healthy`; the app answers on :5199. Specifically
+      confirmed: `dotnet publish` **does** resolve the Sim project reference from the root
+      build context, `/health/deep` returns `provider: Npgsql.EntityFrameworkCore.PostgreSQL`
+      with `reachable: true` (so app→postgres name resolution over the compose network works),
+      and `id` inside the container is `uid=1654(app)` — the `USER $APP_UID` line is doing its
+      job. The `${VAR:?}` guards also fail the run when a secret is missing, checked with an
+      `--env-file` omitting `POSTGRES_PASSWORD`
+- [x] **Determinism holds across OS boundaries** — a side effect of the above worth recording.
+      `/health/sim` inside the Linux container returns raw `90194313216` and the same pinned
+      `DetRandom` sequence as the Windows host. Same assembly, different kernel and libc,
+      identical output, which is exactly the property the fixed-point rule exists to protect
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
       it; `!.env.example` re-includes it). Names use the ASP.NET Core `__` convention so
@@ -237,13 +246,34 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 - [x] Bridge `screenshot` produces a viewable PNG — 30.9 KB, header `89 50 4E 47`, captured
       from `Main Camera`. Note that `Boot.unity` has no camera by design, so a capture there
       correctly reports "No active camera" rather than writing a black frame
-- [ ] **Docker Compose verified** — written but never run. Docker Desktop 29.6.2 is now
-      installed and its "Virtualization support not detected" error was *not* a firmware
-      problem: `systeminfo` already reported a hypervisor present and VBS running. The actual
-      cause was the **Virtual Machine Platform** Windows feature being off, so WSL2 had no
-      backend to start — the WSL client itself (2.7.11) was fine, which is why the error message
-      pointed in the wrong direction. Feature enabled via DISM; **a reboot is pending** and the
-      stack cannot be exercised until then
+- [x] **Docker Compose verified 2026-08-09** — `docker compose up -d` brings all three
+      containers to `healthy` and the app serves `/health`, `/health/sim` and `/health/deep`
+      on :5199, the last of those against Postgres over the compose network.
+
+      Getting there cost an hour to a misleading error. Docker Desktop's "Virtualization support
+      not detected" was *not* a firmware problem: `systeminfo` already reported a hypervisor
+      present and VBS running, and the WSL client (2.7.11) was fine too. The real cause was the
+      **Virtual Machine Platform** Windows feature being off, leaving WSL2 with no backend.
+      Enabled via DISM, then a reboot. Worth remembering that the message named the one layer
+      that was working.
+
+      **The stack comes up with an empty database.** Nothing applies migrations on startup, and
+      `/health/deep` only checks connectivity — so every container reports healthy against a
+      schema of zero tables. Verified directly: `select count(*) from pg_tables where
+      schemaname='public'` returned `0` on a fully-green stack. Do not read a health check as
+      evidence the schema exists.
+
+      Writing that instruction turned up a second bug, because the documented command was then
+      run rather than assumed. `dotnet ef database update` failed twice: once on "More than one
+      DbContext was found" (two providers, so it needs `--context PostgresGameDbContext`), and
+      once on "No password has been provided". The second was the interesting one — the
+      design-time factory **hardcoded** a placeholder connection string, on a comment's premise
+      that it is "never connected to at design time". That holds for `migrations add`, which
+      only needs the dialect, but `database update` genuinely connects, so the placeholder made
+      the command permanently impossible. The factory now prefers `ConnectionStrings__Postgres`
+      from the environment and falls back to the placeholder for scaffolding. Schema then
+      applied cleanly: `players`, `player_states`, `__EFMigrationsHistory`, with `resources`
+      confirmed `jsonb`
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
 - [x] CI green on a fresh push — all **four** jobs pass on `Walid111122/zero-hour`:
       sim, server (Postgres-backed), secret scan, dependency scan

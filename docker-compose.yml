@@ -6,12 +6,16 @@
 # a commented block on the `app` service rather than enabled, because it needs the SDK image
 # as the runtime base — a different Dockerfile target, not just a mounted volume.
 #
-# **Partially verified.** `docker compose config` parses and interpolates this file cleanly
-# against Docker 29.6.2, and the `${VAR:?}` guards were confirmed to fail the run when a
-# required secret is absent. Nothing has yet been *started*: the image has never been built
-# and no container has run, because Docker Desktop needs a pending reboot to bring up its WSL2
-# backend. So the remaining unknowns are the .NET 10 image tags, whether `dotnet publish`
-# resolves the Sim project reference from the root build context, and the `curl` healthcheck.
+# **Verified 2026-08-09** against Docker 29.6.2: image builds in ~2 min, all three containers
+# report `healthy`, and the app answers `/health`, `/health/sim` and `/health/deep` on :5199.
+#
+# NOTE — `docker compose up` gives you an EMPTY DATABASE. Nothing applies migrations on
+# startup (deliberately: auto-migrating on boot is a bad production habit), and `/health/deep`
+# only checks *connectivity*, so the whole stack reports healthy with zero tables in it. Apply
+# the schema explicitly after the first `up`:
+#
+#   $env:ConnectionStrings__Postgres = "Host=localhost;Port=5432;Database=zerohour;Username=zerohour;Password=<from .env>"
+#   dotnet ef database update --project server/ZeroHour.Server
 
 services:
   postgres:

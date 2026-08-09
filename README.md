@@ -52,18 +52,26 @@ than diagnosing it in production.
 ## Current status
 
 Phase A (documentation) complete. Phase 0 largely done: the deterministic sim core, Unity
-client, Cline bridge, server skeleton and CI are all built and verified end to end. What
-remains is verifying the Docker stack, Android player settings, and the nightly Unity CI job.
-See the master checklist for the authoritative state.
+client, Cline bridge, server skeleton, Docker stack and CI are all built and verified end to
+end. What remains is Android player settings and the nightly Unity CI job. See the master
+checklist for the authoritative state.
 
-`docker-compose.yml` and its Dockerfile are **config-validated but never started**: `docker
-compose config` parses cleanly and the required-secret guards were confirmed to fail a run when
-a value is missing, but no image has been built and no container has run. Docker Desktop needs
-a pending reboot first (its WSL2 backend was missing the *Virtual Machine Platform* feature).
-Postgres coverage meanwhile runs as a GitHub Actions service container.
+## Running the stack
+
+Verified on Docker 29.6.2: all three containers reach `healthy` and the app serves `/health`,
+`/health/sim` and `/health/deep` on port 5199.
 
 ```powershell
-cp .env.example .env   # fill in the CHANGE_ME values first
-docker compose config  # validates without needing the daemon
+cp .env.example .env         # fill in the CHANGE_ME values first
+docker compose config        # validates without needing the daemon
 docker compose up -d
+
+# Apply the schema — see below. Needs --context because there are two DbContexts,
+# and needs the connection string exported so the design-time factory can reach Postgres.
+$env:ConnectionStrings__Postgres = "Host=localhost;Port=5432;Database=zerohour;Username=zerohour;Password=<from .env>"
+dotnet ef database update --project server/ZeroHour.Server --context PostgresGameDbContext
 ```
+
+That last step is not optional. **Nothing applies migrations on startup**, and `/health/deep`
+only checks connectivity — so a freshly-started stack reports entirely healthy while the
+database contains zero tables. A green health check is not evidence that the schema exists.
