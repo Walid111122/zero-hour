@@ -155,10 +155,25 @@ that actually answers the question.
       cheapest possible guard against a divergence that would otherwise appear as a desync.
 - [x] `GET /health/ready` → readiness, separate from liveness on purpose: a cache blip must not
       pull a healthy app node out of the load balancer
-- [~] `GET /health/deep` → dependency checks. Postgres connectivity is in, returning **503**
-      rather than a 200 with a sad payload so monitoring need not parse JSON. It reports only
-      the exception *type*: the endpoint is unauthenticated and connection errors carry host,
-      database and sometimes user. Redis is not wired yet
+- [x] `GET /health/deep` → dependency checks, **Postgres and Redis both wired**. Returns
+      **503** rather than a 200 with a sad payload so monitoring need not parse JSON, and
+      reports only the exception *type*: the endpoint is unauthenticated and connection errors
+      carry host, database and sometimes user.
+
+      Redis is treated as a cache rather than a source of truth, so a missing connection string
+      is `configured: false` and stays healthy, while a *configured but unreachable* Redis
+      degrades. `AbortOnConnectFail` is forced off — its default of true throws inside
+      `ConnectionMultiplexer.Connect` and would take the whole app down at startup because
+      the cache was briefly unavailable. The check is a real `PING`, not `IsConnected`: that
+      flag reports what the multiplexer believes and stays true for a while after the server
+      has gone.
+
+      Verified against the running stack in three states rather than one: all up →
+      `200 healthy`, redis `pingMs 0.46`; `docker stop zerohour-redis` → `503 degraded`,
+      `redis.reachable false`, `error RedisConnectionException`; restarted → `200 healthy`
+      again with no app restart, which is what proves the background reconnect works. Note
+      the failing call takes ~5.3 s, since it waits out `ConnectTimeout` — fine for a
+      dashboard endpoint, and the reason this must never be a load-balancer probe
 - [x] SignalR hub with an echo method (proves the realtime path) — `EchoHub` at `/hubs/echo`,
       MessagePack added per `16 §1`. **Verified against a running server, not just compiled:**
       a raw client drove `negotiate` → WebSocket → protocol handshake → `Echo` invocation and
@@ -208,6 +223,17 @@ that actually answers the question.
       `/health/sim` inside the Linux container returns raw `90194313216` and the same pinned
       `DetRandom` sequence as the Windows host. Same assembly, different kernel and libc,
       identical output, which is exactly the property the fixed-point rule exists to protect
+- [x] **Compose no longer reuses one connection string for two network contexts.** Adding the
+      Redis check surfaced a regression from the same session: `/health/deep` reported
+      `database.reachable: false` with `error: null` while `psql` inside the Postgres container
+      answered `select 1` perfectly. Null error because `CanConnectAsync` swallows the
+      exception and returns false, so nothing was logged either. The cause was the app
+      container receiving `Host=localhost` — correct for the host-side `dotnet ef` command
+      documented in 0.5 above, and meaningless inside the container, where `localhost` is the
+      app itself. Both were reading the same `ConnectionStrings__Postgres` variable. Compose
+      now builds the container's string from the authoritative `POSTGRES_*` values with
+      `Host=postgres`, and `.env.example` marks its own strings as host-side-only. Confirmed
+      by `docker exec printenv` (password masked) and a subsequent `200 healthy`
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
       it; `!.env.example` re-includes it). Names use the ASP.NET Core `__` convention so

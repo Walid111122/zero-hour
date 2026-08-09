@@ -15,7 +15,14 @@
 # the schema explicitly after the first `up`:
 #
 #   $env:ConnectionStrings__Postgres = "Host=localhost;Port=5432;Database=zerohour;Username=zerohour;Password=<from .env>"
-#   dotnet ef database update --project server/ZeroHour.Server
+#   dotnet ef database update --project server/ZeroHour.Server --context PostgresGameDbContext
+#
+# TWO NETWORK CONTEXTS, AND THEY NEED DIFFERENT HOSTS. That `Host=localhost` above is correct
+# for a tool running on the *host*, reaching Postgres through the published port. It is wrong
+# inside the app container, where `localhost` is the app itself. The container's connection
+# string is therefore built below from the discrete POSTGRES_* values with `Host=postgres`,
+# rather than reusing the `ConnectionStrings__Postgres` variable — sharing one variable across
+# both contexts is what silently broke the deep health check on 2026-08-09.
 
 services:
   postgres:
@@ -66,8 +73,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
-      ConnectionStrings__Postgres: ${ConnectionStrings__Postgres:?ConnectionStrings__Postgres must be set}
-      ConnectionStrings__Redis: ${ConnectionStrings__Redis:-redis:6379}
+      # Built from the same POSTGRES_* values the database service uses, so the credentials
+      # cannot drift apart, and pinned to the compose service names because these run on the
+      # compose network. Do not swap these for a single pre-baked variable: see the note above.
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-zerohour};Username=${POSTGRES_USER:-zerohour};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      ConnectionStrings__Redis: redis:6379
       Jwt__SigningKey: ${Jwt__SigningKey:?Jwt__SigningKey must be set}
       Jwt__Issuer: ${Jwt__Issuer:-zerohour}
       Jwt__Audience: ${Jwt__Audience:-zerohour-client}

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using StackExchange.Redis;
 using ZeroHour.Server.Data;
 using ZeroHour.Server.Hubs;
 using ZeroHour.Sim;
@@ -47,6 +48,27 @@ else
 
     builder.Services.AddDbContext<GameDbContext, SqliteGameDbContext>(options =>
         options.UseSqlite(sqlite));
+}
+
+// Redis is optional. It is a cache and a SignalR backplane, not a source of truth, so a
+// missing connection string degrades features rather than preventing startup — unlike
+// Postgres above, which the server refuses to run without outside Development.
+string? redis = builder.Configuration.GetConnectionString("Redis");
+
+if (!string.IsNullOrWhiteSpace(redis))
+{
+    ConfigurationOptions redisOptions = ConfigurationOptions.Parse(redis);
+
+    // AbortOnConnectFail defaults to true, which throws at construction if Redis happens to be
+    // down and would take the whole app with it. False lets the multiplexer reconnect in the
+    // background, which is the behaviour a cache should have.
+    redisOptions.AbortOnConnectFail = false;
+    redisOptions.ConnectTimeout = 5000;
+
+    // Singleton and lazy: ConnectionMultiplexer is expensive, thread-safe and designed to be
+    // shared. Lazy so a Redis outage cannot stop the process from starting.
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+        ConnectionMultiplexer.Connect(redisOptions));
 }
 
 // MessagePack over the default JSON protocol (`16 §1`): the payloads are dense and
@@ -116,7 +138,10 @@ app.MapHealthChecks("/health/ready");
 // Dependency check, separate from liveness and readiness on purpose. This one is allowed to
 // be slow and is allowed to fail: it actually talks to the database. Point dashboards and
 // humans at it, never a load balancer, or a transient database blip cycles healthy nodes.
-app.MapGet("/health/deep", async (GameDbContext db, CancellationToken cancellationToken) =>
+app.MapGet("/health/deep", async (
+    GameDbContext db,
+    IServiceProvider services,
+    CancellationToken cancellationToken) =>
 {
     var stopwatch = Stopwatch.StartNew();
 
@@ -139,23 +164,63 @@ app.MapGet("/health/deep", async (GameDbContext db, CancellationToken cancellati
         app.Logger.LogError(ex, "Deep health check could not reach the database");
     }
 
+    // Resolved rather than injected, because Redis is only registered when a connection string
+    // is present. A nullable minimal-API parameter would still be a required dependency and
+    // would 500 the endpoint on the SQLite-only local path.
+    var multiplexer = services.GetService<IConnectionMultiplexer>();
+
+    bool redisConfigured = multiplexer is not null;
+    bool redisReachable = false;
+    string? redisFailure = null;
+    double? redisPingMs = null;
+
+    if (multiplexer is not null)
+    {
+        try
+        {
+            // PING rather than IsConnected: the flag reports what the multiplexer believes,
+            // which stays true for a while after the server has gone. A round trip is the
+            // only thing that proves the connection currently works.
+            TimeSpan latency = await multiplexer.GetDatabase().PingAsync();
+            redisReachable = true;
+            redisPingMs = latency.TotalMilliseconds;
+        }
+        catch (Exception ex)
+        {
+            redisFailure = ex.GetType().Name;
+            app.Logger.LogError(ex, "Deep health check could not reach Redis");
+        }
+    }
+
     stopwatch.Stop();
+
+    // Redis is a cache, so its absence is not failure — but if it is configured and
+    // unreachable, that is a real fault worth surfacing.
+    bool healthy = canConnect && (!redisConfigured || redisReachable);
 
     var payload = new
     {
-        status = canConnect ? "healthy" : "degraded",
+        status = healthy ? "healthy" : "degraded",
         database = new
         {
             reachable = canConnect,
             provider = db.Database.ProviderName,
             error = failure,
         },
+        redis = new
+        {
+            configured = redisConfigured,
+            reachable = redisReachable,
+            pingMs = redisPingMs,
+            error = redisFailure,
+        },
         elapsedMs = stopwatch.Elapsed.TotalMilliseconds,
     };
 
     // 503 rather than 200-with-a-sad-payload: monitoring should not have to parse JSON to
-    // notice the database is gone.
-    return canConnect
+    // notice a dependency is gone. Safe to do for the cache too, because nothing routes
+    // traffic on this endpoint — the load balancer uses /health/ready.
+    return healthy
         ? Results.Ok(payload)
         : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
