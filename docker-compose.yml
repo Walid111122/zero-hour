@@ -6,12 +6,12 @@
 # a commented block on the `app` service rather than enabled, because it needs the SDK image
 # as the runtime base — a different Dockerfile target, not just a mounted volume.
 #
-# **This has never been executed.** Docker is not installed on the dev machine, so the file
-# was written against the config contract in `.env.example` and the schema, but nothing has
-# validated it against a running daemon. Treat the first `docker compose up` as a debugging
-# session, not a smoke test. The likely failure points, in order: the .NET 10 image tags,
-# whether `dotnet publish` resolves the Sim project reference from the root build context,
-# and the `curl` healthcheck.
+# **Partially verified.** `docker compose config` parses and interpolates this file cleanly
+# against Docker 29.6.2, and the `${VAR:?}` guards were confirmed to fail the run when a
+# required secret is absent. Nothing has yet been *started*: the image has never been built
+# and no container has run, because Docker Desktop needs a pending reboot to bring up its WSL2
+# backend. So the remaining unknowns are the .NET 10 image tags, whether `dotnet publish`
+# resolves the Sim project reference from the root build context, and the `curl` healthcheck.
 
 services:
   postgres:

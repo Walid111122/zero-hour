@@ -56,12 +56,14 @@ client, Cline bridge, server skeleton and CI are all built and verified end to e
 remains is verifying the Docker stack, Android player settings, and the nightly Unity CI job.
 See the master checklist for the authoritative state.
 
-`docker-compose.yml` and its Dockerfile exist but have **never been executed** — Docker is not
-installed on the dev machine. The Postgres coverage runs as a GitHub Actions service container
-instead, which is a substitute for the schema tests, not for the stack: nothing has yet brought
-app-plus-database up locally. Expect the first `docker compose up` to need fixing.
+`docker-compose.yml` and its Dockerfile are **config-validated but never started**: `docker
+compose config` parses cleanly and the required-secret guards were confirmed to fail a run when
+a value is missing, but no image has been built and no container has run. Docker Desktop needs
+a pending reboot first (its WSL2 backend was missing the *Virtual Machine Platform* feature).
+Postgres coverage meanwhile runs as a GitHub Actions service container.
 
 ```powershell
 cp .env.example .env   # fill in the CHANGE_ME values first
+docker compose config  # validates without needing the daemon
 docker compose up -d
 ```

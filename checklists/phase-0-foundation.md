@@ -171,11 +171,14 @@ that actually answers the question.
       becomes `TEXT` on SQLite), `id` is `uuid`, `created_at` is `bigint` not `timestamptz`,
       identity generates keys, and `ix_ps_power` really is `DESC` — an ascending index would
       still answer a leaderboard query, by sorting the whole shard first
-- [x] **`docker-compose.yml` written but never executed** — Docker is not installed on this
-      machine, so the file was written from the config contract and schema knowledge, not from
-      a running stack. First launch will be a debugging session, not a smoke test. Dockerfile
-      is multi-stage (SDK build + aspnet runtime), Postgres 16 + Redis 7-alpine, health gates,
-      and a `.dockerignore` that keeps Unity's 400+ MB import cache out of the build context
+- [~] **`docker-compose.yml` — config validated, stack never started.** Multi-stage Dockerfile
+      (SDK build + aspnet runtime, non-root), Postgres 16 + Redis 7-alpine with health gates,
+      and a `.dockerignore` that keeps Unity's import cache out of the build context. What is
+      genuinely proven: `docker compose config` parses and interpolates cleanly under Docker
+      29.6.2, and the `${VAR:?}` guards **fail the run when a required secret is missing** —
+      verified with an `--env-file` that omits `POSTGRES_PASSWORD`, which errors with
+      `required variable POSTGRES_PASSWORD`. What is *not* proven: the image has never been
+      built and no container has ever run
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
       it; `!.env.example` re-includes it). Names use the ASP.NET Core `__` convention so
@@ -234,7 +237,13 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 - [x] Bridge `screenshot` produces a viewable PNG — 30.9 KB, header `89 50 4E 47`, captured
       from `Main Camera`. Note that `Boot.unity` has no camera by design, so a capture there
       correctly reports "No active camera" rather than writing a black frame
-- [ ] **Docker Compose verified** — written but never run; blocked on Docker availability
+- [ ] **Docker Compose verified** — written but never run. Docker Desktop 29.6.2 is now
+      installed and its "Virtualization support not detected" error was *not* a firmware
+      problem: `systeminfo` already reported a hypervisor present and VBS running. The actual
+      cause was the **Virtual Machine Platform** Windows feature being off, so WSL2 had no
+      backend to start — the WSL client itself (2.7.11) was fine, which is why the error message
+      pointed in the wrong direction. Feature enabled via DISM; **a reboot is pending** and the
+      stack cannot be exercised until then
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
 - [x] CI green on a fresh push — all **four** jobs pass on `Walid111122/zero-hour`:
       sim, server (Postgres-backed), secret scan, dependency scan
