@@ -142,8 +142,11 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
 - [x] Command: `open_scene` — path-guarded to `.unity` files under `Assets/`, no `..` segments.
       Play mode runs the *currently open* scene rather than build index 0, so driving play
       remotely is only meaningful if the scene can be selected first
-- [~] Command: `build_webgl` / `build_android` — `BridgeBuilder`, allowlisted, reporting
-      `result`, error/warning counts, output bytes and duration.
+- [x] Command: `build_webgl` / `build_android` — `BridgeBuilder`, allowlisted, reporting
+      `result`, error/warning counts, output bytes and duration. **Both platforms now pass**, and
+      Android also runs headlessly with the editor closed via `tools\scripts\build-android.cmd`
+      → `BatchBuild.BuildAndroid`, which is what makes it usable unattended.
+
 
       **WebGL passes:** 13,903,080 bytes in 7m46s, 0 errors, both scenes included. The
       response reports bytes read back off disk rather than Unity's summary, since a
@@ -152,13 +155,19 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
       That build also drops Burst intermediates in **`client/Data/`** — *outside* the ignored
       `client/Build/`, so they showed up untracked and would have been committed. Now ignored.
 
-      **Android fails, and the reason is a real project defect, not a bridge bug:**
+      **Android now passes too:** 24,663,004 bytes, 0 errors, both scenes, arm64-v8a. The APK was
+      opened as a zip and checked for `AndroidManifest.xml`, `classes.dex`, `libunity.so`,
+      `libil2cpp.so` and two `level` files, because "the build said Succeeded" and "there is a
+      working APK on disk" are different claims.
+
+      **It failed first, and the reason was a real project defect, not a bridge bug:**
       `PlayerSettings->Active Input Handling is set to Both, this is unsupported on Android`.
       Unity cancels the build outright. `activeInputHandler: 2` ("Both") is the value 0.3 left
       behind; it is fine for WebGL and for the editor, which is why nothing caught it until a
       build actually targeted the shipping platform. WebGL passing proves less than it appears.
 
       Two process lessons, both from getting this wrong first:
+
       *The build hung for 3h23m and the hang was not the bug.* Unity raised its error through a
       **modal dialog**, so `BuildPipeline.BuildPlayer` never returned and the bridge never
       answered — the failure was sitting on screen the whole time, waiting for a human. The
@@ -171,14 +180,19 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
       title alone. The setting was already "Both"; the actual message said the opposite of what
       I assumed. `get_logs` had the exception in full, and reading it first would have skipped
       the wrong theory entirely
-- [ ] Set Active Input Handling to a single backend (**Input System Package**, value `1`) in
-      `PlayerSettingsSetup` and re-run the Android build. No project script references
-      `UnityEngine.InputSystem` yet and none uses the legacy `Input` class, so nothing should
-      break — but the change requires an **editor restart** to take effect, and Unity prompts
-      for that restart with another modal, so it cannot be driven from the bridge unattended
-- [ ] Add a build-time guard that fails fast on settings Unity rejects per platform, rather
-      than discovering them 3 hours into a build. Active Input Handling is the known one today
+- [x] Set Active Input Handling to a single backend (**Input System Package**, value `1`) in
+      `PlayerSettingsSetup` and re-run the Android build — done, `activeInputHandler: 1` is
+      committed in `ProjectSettings.asset` (`2f21f60`), and the Android build passes: 0 errors,
+      both scenes, arm64-v8a. The headless path sidesteps the restart-modal problem entirely:
+      every batch invocation is a fresh process, so setting the flag in one run and building in
+      the next needs no human in the loop
+- [x] Add a build-time guard that fails fast on settings Unity rejects per platform, rather
+      than discovering them 3 hours into a build. Active Input Handling is the known one today —
+      `BatchBuild.BuildAndroid` (headless) rejects `activeInputHandler == 2` up front, before
+      IL2CPP starts. The bridge path still discovers it via the build exception, but it now
+      fails in ~20 s with a clear `[BatchBuild]` message instead of hanging on a modal
 - [ ] Command: `generate_so` — CSV → ScriptableObject instances
+
 - [x] Fixed command allowlist, **no arbitrary code execution**
 - [x] Verified excluded from player builds — editor-only asmdef; `bridge/` is gitignored
 - [x] **Round-trip verified:** `{"command":"ping"}` → `{"ok":true,"message":"pong"}` in ~10 s
@@ -205,6 +219,26 @@ files and no code. Fixed by anchoring to `/bridge/`. Two lessons worth keeping: 
 silently*, so "clean status" proves nothing about what is tracked; and verifying a file is
 ignored is not the same as verifying the *right* file is ignored. `git ls-files` is the check
 that actually answers the question.
+
+**Incident, 2026-08-09 — a committed file that was only two `using` lines.** The commit adding
+the headless build entry point (`0df18e0`, "Add headless batch-mode Android build entry point")
+contained `BatchBuild.cs` as `using System;` and `using System.Linq;` and nothing else. No class,
+no method. The write had been truncated and never re-read.
+
+It survived because every check applied to it was one an empty file passes. `compile` returned
+0 errors — an empty file always does. `git status` was clean. The commit message described the
+implementation convincingly enough that later work took it as given. Every
+`-executeMethod BatchBuild.BuildAndroid` run then failed on a missing method, and those failures
+were misattributed to PowerShell argument quoting for several attempts, because the *script*
+invoking it was the thing being actively edited.
+
+Two lessons, and the first is the same one the bridge incident taught in a different costume:
+*a green signal against nothing is not a green signal.* Zero compile errors, zero tests matched
+and zero bytes written all look like success. The other: after writing a file, verify what
+actually landed — `git show HEAD:path` or a line count — because a commit message is a claim
+about content, not evidence of it. Cheap to check, and the alternative is debugging the wrong
+layer for an hour.
+
 
 ## 0.5 Server skeleton
 
