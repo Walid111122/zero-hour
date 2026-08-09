@@ -9,6 +9,17 @@ client/UserSettings/
 client/MemoryCaptures/
 client/Recordings/
 
+# Scaffolding written by com.unity.test-framework.performance (a transitive dependency of
+# the Test Framework, not something we asked for). Regenerated on every test run and it
+# records machine/build state -- "BuildTarget":"WebGL", editor changeset, the full package
+# list -- so it churns constantly and would conflict between machines.
+#
+# Worth noting *where* it lands: Assets/Resources/ ships inside the player build, so this is
+# junk that would otherwise be committed and then shipped. Resources.meta stays tracked to
+# keep the folder GUID stable.
+client/Assets/Resources/PerformanceTestRunInfo.json*
+client/Assets/Resources/PerformanceTestRunSettings.json*
+
 # Burst intermediates from a WebGL player build. Note this lands in client/Data/,
 # *outside* client/Build/, so the build-output rule above does not cover it — found
 # only because a build was actually run and `git status` then showed it untracked.
