@@ -39,11 +39,17 @@ jobs:
           fi
 
   tests:
-    name: Edit-mode tests
+    name: ${{ matrix.testMode }} tests
     needs: guard
     if: needs.guard.outputs.licensed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      # Do not cancel play mode because edit mode failed, or vice versa: when both break at
+      # once the second result is the one that says whether the cause is shared.
+      fail-fast: false
+      matrix:
+        testMode: [editmode, playmode]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -81,7 +87,12 @@ jobs:
         with:
           projectPath: client
           unityVersion: 6000.5.6f1
-          testMode: editmode
+          testMode: ${{ matrix.testMode }}
+          # Both of these are per-leg on purpose. The results path would otherwise be written
+          # twice, and the published check run would collide under one name — leaving a single
+          # ambiguous "Test Results" entry rather than one result per mode.
+          artifactsPath: artifacts-${{ matrix.testMode }}
+          checkName: ${{ matrix.testMode }} results
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
   build-android:

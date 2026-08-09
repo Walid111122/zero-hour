@@ -294,7 +294,16 @@ response body is kept to booleans and an exception type rather than anything des
       a `guard` job that skips them with a notice when the licence is absent, because the
       `secrets` context is unavailable in a job-level `if`, and a nightly that fails red every
       night is a nightly nobody reads. Verify by adding the secret and dispatching it manually
-      rather than waiting for 03:00
+      rather than waiting for 03:00.
+
+      The test job is now a matrix over `editmode` + `playmode`, so the play-mode suite added in
+      0.4 is not local-only. `fail-fast: false` keeps one mode's failure from cancelling the
+      other — when both break together, the second result is what says whether the cause is
+      shared. `artifactsPath` and `checkName` are per-leg because both legs otherwise write the
+      same path and publish one colliding check run. Worth noting the editor's schema validator
+      rejected an invented `artifactsName` input here, which is a reminder that a plausible YAML
+      key is not a real one; the parse and matrix expansion were checked locally, but the action
+      inputs themselves are only truly proven by a licensed run
 - [x] Status badge in `README.md`
 
 **Verified 2026-08-08.** First push to `Walid111122/zero-hour` (private) triggered run
