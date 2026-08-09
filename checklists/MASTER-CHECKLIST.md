@@ -20,7 +20,7 @@
 | Phase | Name | Est. | Status | Detail |
 |---|---|---|---|---|
 | **A** | Documentation & Design | 1 session | `[x]` | this file + `docs/` (29 docs) |
-| **0** | Foundation & Tooling | 2–3 wk | `[~]` | [phase-0](phase-0-foundation.md) — Sim core done |
+| **0** | Foundation & Tooling | 2–3 wk | `[~]` | [phase-0](phase-0-foundation.md) — Sim, client, server, bridge, CI done; both platforms build |
 | **1** | MVP — Runner + Idle | 4–6 wk | `[ ]` | [phase-1](phase-1-mvp.md) |
 | **2** | Vertical Slice — Base | 6–8 wk | `[ ]` | [phase-2](phase-2-vertical-slice.md) |
 | **3** | Core Systems | 8–10 wk | `[ ]` | [phase-3](phase-3-core-systems.md) |
@@ -125,14 +125,21 @@ Scope creep is the number one killer of projects in this genre. These gates are 
 - [x] `ZeroHour.slnx` with all projects
 - [x] `shared/Sim` — netstandard2.1, no UnityEngine, no float (`Fixed`, `DetRandom`, `Hash`)
 - [x] `shared/Sim.Tests` — xUnit, 40 tests green in 52 ms, float ban enforced by test
-- [ ] `client/` — Unity project, URP, portrait, Android + WebGL targets
-- [ ] Unity assembly definitions (asmdef) per module
-- [ ] `server/ZeroHour.Server` — ASP.NET Core 10, health endpoint, WebSocket echo
-- [ ] **Cline Bridge** — console log → file
-- [ ] **Cline Bridge** — command file → editor action → result file
-- [ ] Unity CLI batch-mode scripts (`tools/scripts/*.ps1`)
-- [ ] Local dev DB (SQLite for dev, Postgres-ready)
-- [ ] GitHub Actions CI (GameCI + dotnet build + tests)
+- [x] `client/` — Unity project, URP, portrait, Android + WebGL targets — **both targets build**:
+      WebGL 13.9 MB, Android 24.7 MB unsigned APK, 0 errors each
+- [x] Unity assembly definitions (asmdef) per module — Core/Net/UI/Runner/Base with the
+      dependency rules enforced; World/Voice/Arena deferred to phases 3–5
+- [x] `server/ZeroHour.Server` — ASP.NET Core 10, health endpoint, WebSocket echo
+- [x] **Cline Bridge** — console log → file
+- [x] **Cline Bridge** — command file → editor action → result file
+- [x] Unity CLI batch-mode scripts — `tools/scripts/build-sim.ps1` plus
+      `tools/scripts/build-android.cmd`, which drives a full headless APK build with the editor
+      closed. Note the Android wrapper is `.cmd`, not `.ps1`: the PowerShell call operator never
+      launched Unity on this machine
+- [x] Local dev DB (SQLite for dev, Postgres-ready)
+- [~] GitHub Actions CI — dotnet build + tests + secret/dependency scans are green on a real
+      push. The GameCI leg has never executed: it needs `UNITY_LICENSE`, so it is gated to skip
+      rather than fail red nightly
 - [ ] You open Unity successfully and see the project
 
 → **Detail: [phase-0-foundation.md](phase-0-foundation.md)**
