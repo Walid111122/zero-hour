@@ -15,7 +15,7 @@ All of this is written and tested **without Unity** (`28 §3`).
 - [ ] `RunnerInput` — lane position as `Fixed`, per tick
 - [ ] `RunnerSim.Step(state, input, dt)` — pure, deterministic, fixed-point
 - [ ] `RunnerSim.Simulate(stageDef, inputLog, seed, stats)` → full result (for server re-validation, `20 §4`)
-- [ ] Gate resolution: `+N`, `×N`, `−N`, `÷N`, weapon upgrade, type swap
+- [x] Gate resolution: `+N`, `×N`, `−N`, `÷N`, weapon upgrade, type swap — `Runner/Gate.cs`, all 7 operators incl. `♥ Shield`; malformed gates throw at construction
 - [ ] Auto-fire: rate, damage, range derived from squad + weapon
 - [ ] Enemy waves from a stage definition
 - [ ] Mid-boss and HP-bar wall boss
@@ -25,8 +25,8 @@ All of this is written and tested **without Unity** (`28 §3`).
 
 ### Tests
 - [ ] Same seed + same inputs ⇒ identical final state hash, 100 runs
-- [ ] Gate math never produces a negative or zero squad below 1
-- [ ] `×N` then `÷N` returns the original count
+- [x] Gate math never produces a negative or zero squad below 1 — clamped in `Squad.MinCount`; a gate is a choice, so only combat may end a run
+- [x] `×N` then `÷N` returns the original count — holds for integer factors on any count. **Caveat:** ×/÷ both floor, so mismatched factors drop the remainder (×3 then ÷2 on 7 → 10, not 10.5). Asserted both ways in `GateTests` rather than left latent; fractional soldiers cannot be drawn
 - [ ] Idle accrual clamps at capacity and never goes backwards
 - [ ] A full 20-stage playthrough simulates in under 50 ms
 
