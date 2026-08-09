@@ -68,8 +68,28 @@ The float ban needs to be enforced by tooling, not discipline. A single `float` 
 - [x] `Bootstrap.cs` composition root + `ServiceContainer` + `ServiceLocator`
 - [~] Stub services: `IClock`, `IConfigService`, `ISaveService`, `IEventBus` done.
       `IAudioService` and `IApiClient` deferred to Phase 1, where they get real work to do.
-- [ ] Player settings: portrait, IL2CPP, ARM64, min API 24, target API 35
-- [ ] Three quality tiers created (`18 §8`)
+- [x] Player settings: portrait, IL2CPP, ARM64, **min API 26** (not 24), target API 35 —
+      scripted in `Assets/Editor/PlayerSettingsSetup.cs` and applied in batch mode, because a
+      settings change made by hand is indistinguishable in a diff from one made by accident.
+      **Unity 6 clamps minSdk to 26**: the call asking for 24 succeeded, logged nothing, and
+      left 26 behind. Only reading the value back caught it, which is exactly why the script
+      has a `VerifySettings` entry point that re-reads rather than trusting the setters. The
+      cost is dropping Android 7.x; the alternative is a number in the docs that the editor
+      silently ignores. Confirmed in `ProjectSettings.asset` on disk, not just in-session:
+      `AndroidMinSdkVersion: 26`, `AndroidTargetSdkVersion: 35`, `AndroidTargetArchitectures: 2`
+      (ARM64), `defaultScreenOrientation: 0` (portrait), `scriptingBackend: Android: 1` (IL2CPP)
+- [x] Three quality tiers created (`18 §8`) — Low / Medium / High, verified in
+      `QualitySettings.asset` with per-tier `globalTextureMipmapLimit` 1/0/0 and `shadows` 0/1/2.
+      Two API traps here, both of which compile and appear to work: `QualitySettings.names`
+      returns a **copy**, so assigning into it does nothing at all, and `IncreaseLevel` /
+      `DecreaseLevel` change which tier is *active* rather than how many exist — a loop calling
+      them to reach a target count never terminates. Tiers can only be added or removed through
+      the serialized asset, so that is what the script edits.
+
+      The 30/60 fps caps from `18 §8` are deliberately **not** set here: frame rate is
+      `Application.targetFrameRate`, a runtime value with no per-tier slot in the asset. It
+      belongs to the runtime quality service in Phase 8. Writing it from an editor script would
+      have looked configured and done nothing
 - [x] Project opens with **zero console errors** — opened in Unity 6000.5.6f1; `compile` via the
       bridge returns 0 errors / 0 warnings. Remaining console noise is stock Unity 6 (Input
       Manager and Dynamic Batching deprecation) plus empty-asmdef warnings for the not-yet-
