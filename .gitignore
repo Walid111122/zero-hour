@@ -25,6 +25,12 @@ client/Assets/Resources/PerformanceTestRunSettings.json*
 # only because a build was actually run and `git status` then showed it untracked.
 client/Data/
 
+# Android build scratch space. Same story as client/Data/ above: it sits outside
+# client/Build/, so nothing else here catches it, and it only turned up after an
+# Android build actually completed.
+client/.utmp/
+
+
 client/[Aa]ssets/AssetStoreTools*
 client/[Aa]ssets/Plugins/Editor/JetBrains*
 
