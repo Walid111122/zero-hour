@@ -169,6 +169,11 @@ namespace ZeroHour.Bridge
                     SetPlaying(request.id, false);
                     break;
 
+                case "run_tests":
+                    // argString selects the mode ("edit" / "play"); empty defaults to edit.
+                    BridgeTestRunner.Begin(request.id, request.argString);
+                    break;
+
                 case "open_scene":
                     OpenSceneByPath(request.id, request.argString);
                     break;
@@ -478,36 +483,11 @@ namespace ZeroHour.Bridge
 
         // ---------- response ----------
 
+        // Now a thin forward to BridgeResponder, which `run_tests` also answers through. Kept
+        // as a local method so the many call sites above read unchanged.
         private static void Respond(string id, bool ok, string message, string extraJson = null)
         {
-            BridgePaths.EnsureDirectory();
-
-            var sb = new StringBuilder("{")
-                .Append("\"id\":").Append(Json.Str(id))
-                .Append(",\"ok\":").Append(Json.Bool(ok))
-                .Append(",\"message\":").Append(Json.Str(message))
-                .Append(",\"timestamp\":").Append(Json.Str(
-                    DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)));
-
-            if (!string.IsNullOrEmpty(extraJson))
-            {
-                sb.Append(',').Append(extraJson);
-            }
-
-            sb.Append('}');
-
-            // Write beside the target then move: a reader polling for the response must never
-            // observe a half-written file.
-            string finalPath = BridgePaths.Response;
-            string tempPath = finalPath + ".tmp";
-            File.WriteAllText(tempPath, sb.ToString(), Encoding.UTF8);
-
-            if (File.Exists(finalPath))
-            {
-                File.Delete(finalPath);
-            }
-
-            File.Move(tempPath, finalPath);
+            BridgeResponder.Respond(id, ok, message, extraJson);
         }
     }
 }
