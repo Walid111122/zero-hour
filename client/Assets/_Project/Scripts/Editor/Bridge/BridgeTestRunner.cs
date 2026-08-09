@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using UnityEditor;
+using UnityEditor.Compilation;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
@@ -88,9 +90,61 @@ namespace ZeroHour.Bridge
             SessionState.SetString(PendingIdKey, id);
             SessionState.SetString(PendingModeKey, requested);
 
+            var filter = new Filter { testMode = testMode };
+
+            // Restrict discovery to this project's own test assemblies. An unfiltered run also
+            // executes tests shipped inside packages — Addressables contributes one — which
+            // means a package author's test could turn the build red for code we do not own.
+            string[] assemblies = ProjectTestAssemblies();
+            if (assemblies.Length > 0)
+            {
+                filter.assemblyNames = assemblies;
+            }
+
             TestRunnerApi api = GetApi();
             api.RegisterCallbacks(ScriptableObject.CreateInstance<BridgeTestCallbacks>());
-            api.Execute(new ExecutionSettings(new Filter { testMode = testMode }));
+            api.Execute(new ExecutionSettings(filter));
+        }
+
+        /// <summary>
+        /// Names the test assemblies that live under <c>Assets/</c>, identified by their
+        /// reference to NUnit.
+        ///
+        /// Derived from the compilation pipeline rather than hardcoded, so adding a second test
+        /// assembly does not silently stop it being run — the failure mode of a hardcoded list
+        /// is tests that quietly never execute, which is worse than no filter at all.
+        ///
+        /// Returns empty if nothing matches, and the caller then runs unfiltered; a run that
+        /// matches no tests is already reported as a failure rather than a pass.
+        /// </summary>
+        private static string[] ProjectTestAssemblies()
+        {
+            var names = new List<string>();
+
+            foreach (Assembly assembly in CompilationPipeline.GetAssemblies(AssembliesType.Editor))
+            {
+                if (assembly.sourceFiles == null || assembly.sourceFiles.Length == 0)
+                {
+                    continue;
+                }
+
+                string first = assembly.sourceFiles[0].Replace('\\', '/');
+                if (!first.StartsWith("Assets/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                foreach (string reference in assembly.compiledAssemblyReferences)
+                {
+                    if (reference.Replace('\\', '/').Contains("nunit.framework"))
+                    {
+                        names.Add(assembly.name);
+                        break;
+                    }
+                }
+            }
+
+            return names.ToArray();
         }
 
         internal static TestRunnerApi GetApi()

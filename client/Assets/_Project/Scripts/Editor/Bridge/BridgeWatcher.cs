@@ -51,10 +51,11 @@ namespace ZeroHour.Bridge
         /// <summary>
         /// Appends a line to <c>bridge/trace.log</c>.
         ///
-        /// Diagnosing anything that spans a domain reload needs a sink that survives one, which
-        /// rules out both the console buffer (a static, wiped by the reload) and Debug.Log
-        /// (Editor.log was not being flushed while the editor ran unfocused). A file is crude
-        /// and works.
+        /// Kept after it earned its place: diagnosing anything that spans a domain reload needs
+        /// a sink that survives one, which rules out both the console buffer (a static, wiped by
+        /// the reload) and Debug.Log (Editor.log was not being flushed while the editor ran
+        /// unfocused). This is what identified the dropped-callback bug in the compile path, and
+        /// the next reload-related bug will need it just as much.
         /// </summary>
         internal static void Trace(string line)
         {
