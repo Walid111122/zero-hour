@@ -53,9 +53,15 @@ than diagnosing it in production.
 
 Phase A (documentation) complete. Phase 0 largely done: the deterministic sim core, Unity
 client, Cline bridge, server skeleton and CI are all built and verified end to end. What
-remains is Docker Compose for local Postgres and Redis, Android player settings, and the
-nightly Unity CI job. See the master checklist for the authoritative state.
+remains is verifying the Docker stack, Android player settings, and the nightly Unity CI job.
+See the master checklist for the authoritative state.
 
-`docker-compose.yml` is blocked on Docker being unavailable on the dev machine, so the
-Postgres coverage runs as a GitHub Actions service container instead. That is a real gap
-rather than a substitute: nothing has yet brought the full app-plus-database stack up locally.
+`docker-compose.yml` and its Dockerfile exist but have **never been executed** — Docker is not
+installed on the dev machine. The Postgres coverage runs as a GitHub Actions service container
+instead, which is a substitute for the schema tests, not for the stack: nothing has yet brought
+app-plus-database up locally. Expect the first `docker compose up` to need fixing.
+
+```powershell
+cp .env.example .env   # fill in the CHANGE_ME values first
+docker compose up -d
+```

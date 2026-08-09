@@ -1,0 +1,32 @@
+# The build context is the repository root, which contains the Unity project. Without this
+# file, `docker build` uploads client/Library and client/Temp — hundreds of megabytes of
+# regenerable import cache — before the first instruction runs. The build would still
+# succeed, just slowly enough that nobody uses it.
+
+# Unity: all regenerable, none of it needed to build the server.
+client/Library/
+client/Temp/
+client/Logs/
+client/obj/
+client/Build/
+client/UserSettings/
+
+# .NET build output. Copying a host bin/ into the image risks shadowing what the container
+# builds with binaries from a different RID.
+**/bin/
+**/obj/
+
+# Secrets. `.env` is gitignored, but .gitignore has no bearing on a Docker build context,
+# and anything copied into a layer stays in the image history even if later deleted.
+.env
+.env.*
+!.env.example
+
+# Bridge transcript: editor-only, and can contain absolute local paths.
+bridge/
+
+.git/
+.github/
+docs/
+checklists/
+*.md

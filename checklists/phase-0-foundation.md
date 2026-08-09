@@ -171,7 +171,11 @@ that actually answers the question.
       becomes `TEXT` on SQLite), `id` is `uuid`, `created_at` is `bigint` not `timestamptz`,
       identity generates keys, and `ix_ps_power` really is `DESC` — an ascending index would
       still answer a leaderboard query, by sorting the whole shard first
-- [ ] `docker-compose.yml` for local: app + postgres + redis
+- [x] **`docker-compose.yml` written but never executed** — Docker is not installed on this
+      machine, so the file was written from the config contract and schema knowledge, not from
+      a running stack. First launch will be a debugging session, not a smoke test. Dockerfile
+      is multi-stage (SDK build + aspnet runtime), Postgres 16 + Redis 7-alpine, health gates,
+      and a `.dockerignore` that keeps Unity's 400+ MB import cache out of the build context
 - [~] Config via environment variables; `.env.example` committed, `.env` gitignored — the
       template exists and is verified *tracked* (the `.env*` rule would otherwise have eaten
       it; `!.env.example` re-includes it). Names use the ASP.NET Core `__` convention so
@@ -230,7 +234,7 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
 - [x] Bridge `screenshot` produces a viewable PNG — 30.9 KB, header `89 50 4E 47`, captured
       from `Main Camera`. Note that `Boot.unity` has no camera by design, so a capture there
       correctly reports "No active camera" rather than writing a black frame
-- [ ] Docker Compose brings up app + postgres + redis locally
+- [ ] **Docker Compose verified** — written but never run; blocked on Docker availability
 - [x] `GET /health` returns healthy — confirmed against a running instance on :5199
 - [x] CI green on a fresh push — all **four** jobs pass on `Walid111122/zero-hour`:
       sim, server (Postgres-backed), secret scan, dependency scan

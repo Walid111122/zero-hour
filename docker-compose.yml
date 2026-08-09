@@ -1,0 +1,89 @@
+# Zero Hour — local development stack
+#
+# Run from repository root:  docker compose up -d
+#
+# Brings up Postgres, Redis and the app server as a Release build. Hot-reload is sketched in
+# a commented block on the `app` service rather than enabled, because it needs the SDK image
+# as the runtime base — a different Dockerfile target, not just a mounted volume.
+#
+# **This has never been executed.** Docker is not installed on the dev machine, so the file
+# was written against the config contract in `.env.example` and the schema, but nothing has
+# validated it against a running daemon. Treat the first `docker compose up` as a debugging
+# session, not a smoke test. The likely failure points, in order: the .NET 10 image tags,
+# whether `dotnet publish` resolves the Sim project reference from the root build context,
+# and the `curl` healthcheck.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: zerohour-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zerohour}
+      POSTGRES_USER: ${POSTGRES_USER:-zerohour}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      # Exposed on localhost so PgAdmin and database clients can reach it. Production binds
+      # only to the Docker network and a reverse proxy terminates TLS in front (`24 §2`).
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zerohour}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: zerohour-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: server/ZeroHour.Server/Dockerfile
+    container_name: zerohour-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+      ConnectionStrings__Postgres: ${ConnectionStrings__Postgres:?ConnectionStrings__Postgres must be set}
+      ConnectionStrings__Redis: ${ConnectionStrings__Redis:-redis:6379}
+      Jwt__SigningKey: ${Jwt__SigningKey:?Jwt__SigningKey must be set}
+      Jwt__Issuer: ${Jwt__Issuer:-zerohour}
+      Jwt__Audience: ${Jwt__Audience:-zerohour-client}
+      Jwt__AccessTokenMinutes: ${Jwt__AccessTokenMinutes:-60}
+    ports:
+      - "5199:8080"
+    # Uncomment for local development: mount source and install dotnet-watch. The image as
+    # written is a Release build with no SDK; hot-reload requires mounting the source and
+    # overriding ENTRYPOINT to `dotnet watch`, which needs the SDK image as the runtime base.
+    # volumes:
+    #   - ./server:/src/server:ro
+    #   - ./shared:/src/shared:ro
+    # entrypoint: ["dotnet", "watch", "--project", "/src/server/ZeroHour.Server"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres-data:
+  redis-data:
