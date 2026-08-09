@@ -147,7 +147,6 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
       Android also runs headlessly with the editor closed via `tools\scripts\build-android.cmd`
       → `BatchBuild.BuildAndroid`, which is what makes it usable unattended.
 
-
       **WebGL passes:** 13,903,080 bytes in 7m46s, 0 errors, both scenes included. The
       response reports bytes read back off disk rather than Unity's summary, since a
       "Succeeded" result with no artifact is exactly the failure worth catching.
@@ -191,8 +190,13 @@ Per `28 §2`. Editor-only assembly, file-based protocol, gitignored `bridge/` fo
       `BatchBuild.BuildAndroid` (headless) rejects `activeInputHandler == 2` up front, before
       IL2CPP starts. The bridge path still discovers it via the build exception, but it now
       fails in ~20 s with a clear `[BatchBuild]` message instead of hanging on a modal
-- [ ] Command: `generate_so` — CSV → ScriptableObject instances
-
+- [-] Command: `generate_so` — CSV → ScriptableObject instances. **Cut from Phase 0**, not
+      forgotten: there is not a single game-data `ScriptableObject` type in the project yet
+      (the only `ScriptableObject` here is test-runner plumbing). Building it now means
+      inventing the balance types from `12` a phase or two early and guessing their fields,
+      then testing the converter against fixtures written to match the guess. That is a green
+      check over nothing — the same shape of mistake as the empty `BatchBuild.cs` below. It
+      lands in Phase 2, with the first real data type it has to convert
 - [x] Fixed command allowlist, **no arbitrary code execution**
 - [x] Verified excluded from player builds — editor-only asmdef; `bridge/` is gitignored
 - [x] **Round-trip verified:** `{"command":"ping"}` → `{"ok":true,"message":"pong"}` in ~10 s
@@ -390,9 +394,12 @@ The first run logged a Node.js 20 deprecation for `actions/checkout@v4` and
       `AndroidPlayer`, `WebGLSupport` and `windowsstandalonesupport` under the editor's
       `PlaybackEngines`. Both target modules are what make the `build_*` bridge commands
       possible at all
-- [ ] Sign in to Unity (Personal licence)
-- [ ] Open `f:\last war build\client`, wait out the first import
-- [ ] Install the packages Cline lists
+- [x] Sign in to Unity (Personal licence) — implied by every build since: IL2CPP will not run
+      unlicensed. `unity-android.log` does log a failed handshake to `LicenseClient-Lenovo`,
+      which is noise from the editor being closed; the entitlement resolves anyway
+- [x] Open `f:\last war build\client`, wait out the first import — `Library/ScriptAssemblies`
+      is populated, so the project has imported at least once
+- [x] Install the packages Cline lists — 41 `com.unity.*` entries in `Packages/manifest.json`
 - [x] Run `tools\scripts\build-sim.ps1` once — build clean, determinism suite 40/40 in 47 ms,
       `ZeroHour.Sim.dll` (12.5 KB) copied into `client/Assets/Plugins/`
 - [x] Press Play on `Boot.unity`, confirm no errors — driven through the bridge:

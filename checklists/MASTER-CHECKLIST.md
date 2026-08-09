@@ -140,7 +140,8 @@ Scope creep is the number one killer of projects in this genre. These gates are 
 - [~] GitHub Actions CI — dotnet build + tests + secret/dependency scans are green on a real
       push. The GameCI leg has never executed: it needs `UNITY_LICENSE`, so it is gated to skip
       rather than fail red nightly
-- [ ] You open Unity successfully and see the project
+- [x] You open Unity successfully and see the project — licence active, project imported,
+      41 packages installed, Play driven through the bridge with 0 errors
 
 → **Detail: [phase-0-foundation.md](phase-0-foundation.md)**
 
