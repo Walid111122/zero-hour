@@ -61,8 +61,13 @@ echo   finished: %TIME%
 if exist "%LOGFILE%" (
     echo.
     echo --- BatchBuild / PlayerSettings / errors ---
-    findstr /c:"[BatchBuild]" /c:"[PlayerSettings]" /c:"error CS" /c:"Exception" "%LOGFILE%"
+    REM A bare "Exception" pattern is useless here: it matches every frame of Unity's
+    REM compilation stack traces and any package file with Exception in its name, which
+    REM buries the four lines you actually want. BatchBuild prefixes its own failures
+    REM with [BatchBuild] EXCEPTION, so the tag filters already cover them.
+    findstr /c:"[BatchBuild]" /c:"[PlayerSettings]" /c:"error CS" /c:"Fatal Error" /c:"BuildFailedException" "%LOGFILE%"
 ) else (
+
     echo.
     echo WARNING: no log at "%LOGFILE%" -- Unity died before opening one.
 )
